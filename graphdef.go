@@ -4,6 +4,9 @@ import (
 	"strings"
 )
 
+// OpenTelemetry naming
+// https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/api-metrics-user.md
+
 // SplitGraphName splits "a/b" into groupName, metricName.
 func SplitGraphName(s string) (groupName, metricName string) {
 	i := strings.LastIndex(s, "/")

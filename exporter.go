@@ -2,217 +2,183 @@ package mackerel
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/api/core"
+	"go.opentelemetry.io/otel/api/global"
+	"go.opentelemetry.io/otel/api/unit"
+	export "go.opentelemetry.io/otel/sdk/export/metric"
+	"go.opentelemetry.io/otel/sdk/export/metric/aggregator"
+	metricsdk "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/batcher/defaultkeys"
+	"go.opentelemetry.io/otel/sdk/metric/controller/push"
+	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
+
 	"github.com/mackerelio/mackerel-client-go"
-	"go.opencensus.io/metric/metricdata"
-	"go.opencensus.io/metric/metricexport"
-	"go.opencensus.io/resource/resourcekeys"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
 )
 
 const (
-	UnitDimensionless = metricdata.UnitDimensionless
-	UnitBytes         = metricdata.UnitBytes
-	UnitMilliseconds  = metricdata.UnitMilliseconds
+	UnitDimensionless = unit.Dimensionless
+	UnitBytes         = unit.Bytes
+	UnitMilliseconds  = unit.Milliseconds
 )
 
 var (
-	// A uniquely identifying name for the host.
-	HostKeyName = tag.MustNewKey(resourcekeys.HostKeyName)
-
-	HostKeyID = tag.MustNewKey(resourcekeys.HostKeyID)
+	// see https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/data-resource-semantic-conventions.md
+	keyHostID   = core.Key("host.id")
+	keyHostName = core.Key("host.name")
 )
+
+// InstallNewPipeline instantiates a NewExportPipeline and registers it globally.
+func InstallNewPipeline(opts ...Option) (*push.Controller, error) {
+	pusher, err := NewExportPipeline(opts...)
+	if err != nil {
+		return nil, err
+	}
+	global.SetMeterProvider(pusher)
+	return pusher, err
+}
+
+// NewExportPipeline sets up a complete export pipeline.
+func NewExportPipeline(opts ...Option) (*push.Controller, error) {
+	// There are few types in simple; inexpensive, sketch, exact.
+	s := simple.NewWithExactMeasure()
+	exporter, err := NewExporter(opts...)
+	if err != nil {
+		return nil, err
+	}
+	batcher := defaultkeys.New(s, metricsdk.NewDefaultLabelEncoder(), true)
+	pusher := push.New(batcher, exporter, time.Minute)
+	pusher.Start()
+	return pusher, nil
+}
+
+// Option is function type that is passed to NewExporter function.
+type Option func(*options)
+
+type options struct {
+	APIKey string
+}
+
+// WithAPIKey sets the Mackerel API Key.
+func WithAPIKey(apiKey string) func(o *options) {
+	return func(o *options) {
+		o.APIKey = apiKey
+	}
+}
 
 // Exporter is a stats exporter that uploads data to Mackerel.
 type Exporter struct {
-	opts Options
-	once sync.Once
-	r    *metricexport.IntervalReader
-	c    *mackerel.Client
+	quantile float64
+	c        *mackerel.Client
 }
 
-// Options contains options for configuring the exporter.
-type Options struct {
-	APIKey    string
-	Namespace string
-}
+var _ export.Exporter = &Exporter{}
 
-func NewExporter(o Options) (*Exporter, error) {
+const defaultQuantile = 0.9
+
+// NewExporter creates a new Exporter.
+func NewExporter(opts ...Option) (*Exporter, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	c := mackerel.NewClient(o.APIKey)
 	return &Exporter{
-		opts: o,
-		c:    c,
+		c: c,
 	}, nil
-}
-
-// (experimental)
-func makeGraphDef(v *view.View) *mackerel.GraphDefsParam {
-	groupName, metricName := SplitGraphName(v.Name)
-
-	// allows: float, integer, percentage, bytes, bytes/sec, iops
-	unit := "1"
-	switch v.Measure.Unit() {
-	case "1":
-		unit = "float"
-	case "By":
-		unit = "bytes"
-	case "ms":
-		unit = "float"
-	}
-	return &mackerel.GraphDefsParam{
-		Name:        groupName,
-		DisplayName: "",
-		Unit:        unit,
-		Metrics: []*mackerel.GraphDefsMetric{
-			&mackerel.GraphDefsMetric{
-				Name:        metricName,
-				DisplayName: v.Description,
-				IsStacked:   false,
-			},
-		},
-	}
-}
-
-func (e *Exporter) ExportView(vd *view.Data) {
-	fmt.Println("name:", vd.View.Name)
-	for _, row := range vd.Rows {
-		switch v := row.Data.(type) {
-		case *view.DistributionData:
-		case *view.CountData:
-			fmt.Println("count:", v.Value)
-		case *view.SumData:
-			fmt.Println("sum:", v.Value)
-		case *view.LastValueData:
-			fmt.Println("last:", v.Value)
-		}
-	}
-}
-
-// Start starts the metric exporter.
-func (e *Exporter) Start(interval time.Duration) error {
-	var err error
-	e.once.Do(func() {
-		e.r, err = metricexport.NewIntervalReader(&metricexport.Reader{}, e)
-	})
-	if err != nil {
-		return err
-	}
-	//trace.RegisterExporter(e)
-	e.r.ReportingInterval = interval
-	return e.r.Start()
-}
-
-func (e *Exporter) Stop() {
-	//trace.UnregisterExporter(e)
-	e.r.Stop()
 }
 
 func (e *Exporter) ErrLog(err error) {
 	log.Println(err)
 }
 
-func (e *Exporter) ExportMetrics(ctx context.Context, data []*metricdata.Metric) error {
-	a := convertToHostMetrics(data)
-	if err := e.c.PostHostMetricValues(a); err != nil {
+func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
+	var metrics []*mackerel.HostMetricValue
+	a.ForEach(func(r export.Record) {
+		m := e.convertToHostMetric(r)
+		if m == nil {
+			return
+		}
+		metrics = append(metrics, m)
+	})
+	if err := e.c.PostHostMetricValues(metrics); err != nil {
 		e.ErrLog(err)
 		return err
 	}
 	return nil
 }
 
-func convertToHostMetrics(a []*metricdata.Metric) []*mackerel.HostMetricValue {
-	var r []*mackerel.HostMetricValue
-	for _, p := range a {
-		name := metricName(p.Descriptor)
-		i := labelKeyIndex(p.Descriptor, HostKeyID.Name())
-		if i < 0 {
-			continue
-		}
-		for _, ts := range p.TimeSeries {
-			if !ts.LabelValues[i].Present {
-				continue
-			}
-			hostID := ts.LabelValues[i].Value
-			a := hostMetricValues(hostID, metricValues(name, ts.Points))
-			r = append(r, a...)
-		}
+func (e *Exporter) convertToHostMetric(r export.Record) *mackerel.HostMetricValue {
+	desc := r.Descriptor()
+	name := cleanName(desc.Name())
+	aggr := r.Aggregator()
+	kind := desc.NumberKind()
+
+	// TODO(lufia): desc.Description will be used for graph-def.
+
+	labels := r.Labels().Ordered()
+	meta := hostMetaFromLabels(labels)
+	hostID := meta[keyHostID]
+	m := metricValue(name, aggr, kind)
+	return &mackerel.HostMetricValue{
+		HostID:      hostID,
+		MetricValue: m,
 	}
-	return r
 }
 
-func metricName(d metricdata.Descriptor) string {
-	s1, s2 := SplitGraphName(d.Name)
+func hostMetaFromLabels(labels []core.KeyValue) map[core.Key]string {
+	m := make(map[core.Key]string)
+	for _, kv := range labels {
+		if !kv.Key.Defined() {
+			continue
+		}
+		m[kv.Key] = kv.Value.Emit()
+	}
+	return m
+}
+
+// Deprecated: We might use labels; {class=custom.xxx.#.*.name}
+func metricName(d *export.Descriptor) string {
+	s1, s2 := SplitGraphName(d.Name())
 	return strings.Join([]string{s1, s2}, ".")
 }
 
-func labelKeyIndex(d metricdata.Descriptor, key string) int {
-	for i, k := range d.LabelKeys {
-		if k.Key == key {
-			return i
-		}
-	}
-	return -1
-}
+func metricValue(name string, aggr export.Aggregator, kind core.NumberKind) *mackerel.MetricValue {
+	var v interface{}
 
-func metricValues(name string, p []metricdata.Point) []*mackerel.MetricValue {
-	var a []*mackerel.MetricValue
-	for _, v := range p {
-		switch n := v.Value.(type) {
-		case int64, float64:
-			a = append(a, &mackerel.MetricValue{
-				Name:  name,
-				Time:  v.Time.Unix(),
-				Value: n,
-			})
+	// see https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/selector/simple/simple.go
+	if p, ok := aggr.(aggregator.Distribution); ok {
+		// export.MeasureKind: MinMaxSumCount, Distribution, Points
+		q, err := p.Quantile(defaultQuantile)
+		if err != nil {
+			return nil
 		}
-	}
-	return a
-}
-
-func hostMetricValues(hostID string, a []*mackerel.MetricValue) []*mackerel.HostMetricValue {
-	var r []*mackerel.HostMetricValue
-	for _, v := range a {
-		r = append(r, &mackerel.HostMetricValue{
-			HostID:      hostID,
-			MetricValue: v,
-		})
-	}
-	return r
-}
-
-func dumpMetrics(data []*metricdata.Metric) {
-	for _, v := range data {
-		fmt.Println("name:", v.Descriptor.Name)
-		fmt.Println("desc:", v.Descriptor.Description)
-		fmt.Println("unit:", v.Descriptor.Unit)
-		fmt.Println("type:", v.Descriptor.Type)
-		//fmt.Println("res.type:", v.Resource.Type)
-		//fmt.Println("res.labels:", v.Resource.Labels)
-		for i, ts := range v.TimeSeries {
-			for j, k := range v.Descriptor.LabelKeys {
-				fmt.Printf("- [%d]%s=%v\n", i, k.Key, ts.LabelValues[j].Value)
-			}
-			for _, p := range ts.Points {
-				fmt.Println(p.Time, p.Value)
-				switch x := p.Value.(type) {
-				case int64:
-					fmt.Println("int:", x)
-				case float64:
-					fmt.Println("float:", x)
-				case *metricdata.Distribution:
-					fmt.Println("distribution:", x)
-				case *metricdata.Summary:
-					fmt.Println("summary:", x)
-				}
-			}
+		v = q.AsInterface(kind)
+	} else if p, ok := aggr.(aggregator.LastValue); ok {
+		// export.GaugeKind: LastValue
+		last, _, err := p.LastValue()
+		if err != nil {
+			return nil
 		}
-		fmt.Println("----------------")
+		v = last.AsInterface(kind)
+	} else if p, ok := aggr.(aggregator.Sum); ok {
+		// export.CounterKind: Sum
+		sum, err := p.Sum()
+		if err != nil {
+			return nil
+		}
+		v = sum.AsInterface(kind)
+	} else {
+		return nil
+	}
+
+	return &mackerel.MetricValue{
+		Name:  name,
+		Time:  time.Now().Unix(),
+		Value: v,
 	}
 }
 
