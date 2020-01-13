@@ -2,7 +2,6 @@ package mackerel
 
 import (
 	"context"
-	"log"
 	"strings"
 	"time"
 
@@ -91,10 +90,6 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 	}, nil
 }
 
-func (e *Exporter) ErrLog(err error) {
-	log.Println(err)
-}
-
 func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	var metrics []*mackerel.HostMetricValue
 	a.ForEach(func(r export.Record) {
@@ -105,7 +100,6 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 		metrics = append(metrics, m)
 	})
 	if err := e.c.PostHostMetricValues(metrics); err != nil {
-		e.ErrLog(err)
 		return err
 	}
 	return nil
