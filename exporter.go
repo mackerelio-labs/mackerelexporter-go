@@ -26,8 +26,20 @@ const (
 
 var (
 	// see https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/data-resource-semantic-conventions.md
-	keyHostID   = core.Key("host.id")
-	keyHostName = core.Key("host.name")
+	keyServiceNS         = core.Key("service.namespace")
+	keyServiceName       = core.Key("service.name")
+	keyServiceInstanceID = core.Key("service.instance.id")
+	keyServiceVersion    = core.Key("service.version")
+	keyHostID            = core.Key("host.id")
+	keyHostName          = core.Key("host.name")
+	keyCloudProvider     = core.Key("cloud.provider")
+
+	keyMetricClass = core.Key("metric.class") // for graph-def
+
+	requiredKeys = []core.Key{
+		keyServiceName,
+		keyServiceInstanceID,
+	}
 )
 
 // InstallNewPipeline instantiates a NewExportPipeline and registers it globally.
@@ -90,7 +102,17 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 	}, nil
 }
 
+func validate(r export.Record) error {
+	return errors.New("not implement")
+}
+
 func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
+	// TODO(lufia): desc.Description will be used for graph-def.
+	a.ForEach(func(r export.Record) {
+		if err := validate(r); err != nil {
+		}
+	})
+
 	var metrics []*mackerel.HostMetricValue
 	a.ForEach(func(r export.Record) {
 		m := e.convertToHostMetric(r)
@@ -111,11 +133,11 @@ func (e *Exporter) convertToHostMetric(r export.Record) *mackerel.HostMetricValu
 	aggr := r.Aggregator()
 	kind := desc.NumberKind()
 
-	// TODO(lufia): desc.Description will be used for graph-def.
-
-	labels := r.Labels().Ordered()
-	meta := hostMetaFromLabels(labels)
+	meta := hostMetaFromLabels(r.Labels().Ordered())
 	hostID := meta[keyHostID]
+
+	// TODO(lufia): if hostID is not set, it's the service metric.
+
 	m := metricValue(name, aggr, kind)
 	return &mackerel.HostMetricValue{
 		HostID:      hostID,
@@ -174,71 +196,4 @@ func metricValue(name string, aggr export.Aggregator, kind core.NumberKind) *mac
 		Time:  time.Now().Unix(),
 		Value: v,
 	}
-}
-
-type Host struct {
-	Name             string
-	CustomIdentifier string
-	Meta             HostMeta
-
-	//Roles            Roles
-	//Interfaces       []Interface
-}
-
-type HostMeta struct {
-	AgentVersion string
-	AgentName    string
-	CPUName      string
-	CPUMHz       int
-
-	//BlockDevice   BlockDevice
-	//Filesystem    FileSystem
-	//Memory        Memory
-	//Cloud         *Cloud
-}
-
-func (e *Exporter) RegisterHost(h *Host) (string, error) {
-	id, err := e.lookupHost(h)
-	if err != nil {
-		return "", err
-	}
-	if id != "" {
-		// TODO(lufia): we should update a host
-		return id, nil // The host was already registered
-	}
-
-	cpu0 := map[string]interface{}{
-		"model_name": h.Meta.CPUName,
-		"mhz":        h.Meta.CPUMHz,
-	}
-	param := mackerel.CreateHostParam{
-		Name:             h.Name,
-		CustomIdentifier: h.CustomIdentifier,
-		Meta: mackerel.HostMeta{
-			AgentVersion: h.Meta.AgentVersion,
-			AgentName:    h.Meta.AgentName,
-			CPU:          mackerel.CPU{cpu0},
-			Kernel: map[string]string{
-				"os":      "Plan 9",
-				"release": "4e",
-				"version": "2000",
-			},
-		},
-	}
-	return e.c.CreateHost(&param)
-}
-
-func (e *Exporter) lookupHost(h *Host) (string, error) {
-	if h.CustomIdentifier != "" {
-		a, err := e.c.FindHosts(&mackerel.FindHostsParam{
-			CustomIdentifier: h.CustomIdentifier,
-		})
-		if err != nil {
-			return "", err
-		}
-		if len(a) > 0 {
-			return a[0].ID, nil
-		}
-	}
-	return "", nil // not found
 }
