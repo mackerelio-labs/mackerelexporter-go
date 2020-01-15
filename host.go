@@ -1,6 +1,13 @@
 package mackerel
 
 import (
+	"errors"
+	"fmt"
+	"os"
+	"reflect"
+	"strings"
+
+	"github.com/mackerelio/mackerel-client-go"
 	"go.opentelemetry.io/otel/api/core"
 )
 
@@ -41,21 +48,90 @@ type HostMeta struct {
 }
 
 func UnmarshalHost(meta []core.KeyValue, data interface{}) error {
-	var h Host
-	for k, s := range meta {
+	for _, kv := range meta {
 		if !kv.Key.Defined() {
 			continue
 		}
 		keys := strings.Split(string(kv.Key), ".")
-		unmarshalHost(keys, kv.Value.Emit(), data)
+		if err := unmarshalHost(keys, kv.Value, data); err != nil {
+			return err
+		}
 	}
-	reflect
+	return nil
 }
 
-func unmarshalHost(keys []string, value string, data interface{}) error {
-	v := reflect.ValueOf(data)
-	if v.Type().Kind() {
+func unmarshalHost(keys []string, value core.Value, data interface{}) error {
+	v := reflect.Indirect(reflect.ValueOf(data))
+	switch kind := v.Type().Kind(); kind {
+	case reflect.Ptr:
+		return unmarshalHost(keys, value, v.Interface())
+	case reflect.Struct:
+		if len(keys) == 0 {
+			return errors.New("missing")
+		}
+		fields := collectFields(v)
+		f, ok := fields[keys[0]]
+		if !ok {
+			return nil // ignore this field
+		}
+		return unmarshalHost(keys[1:], value, f)
+	case reflect.Map:
+		return nil
+	case reflect.Bool:
+		if len(keys) != 0 {
+			return errors.New("overflow")
+		}
+		if !v.CanSet() {
+			return nil
+		}
+		v.SetBool(value.AsBool())
+		return nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if len(keys) != 0 {
+			return errors.New("overflow")
+		}
+		if !v.CanSet() {
+			return nil
+		}
+		v.SetInt(value.AsInt64())
+		return nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if len(keys) != 0 {
+			return errors.New("overflow")
+		}
+		if !v.CanSet() {
+			return nil
+		}
+		v.SetUint(value.AsUint64())
+		return nil
+	case reflect.Float32, reflect.Float64:
+		if len(keys) != 0 {
+			return errors.New("overflow")
+		}
+		if !v.CanSet() {
+			return nil
+		}
+		v.SetFloat(value.AsFloat64())
+		return nil
+	// 	Uintptr
+	default:
+		return fmt.Errorf("unsupported type: %v", kind)
 	}
+}
+
+// collectFields returns a map pointed to fields by the `meta` tag.
+func collectFields(v reflect.Value) map[string]reflect.Value {
+	a := make(map[string]reflect.Value)
+	n := v.NumField()
+	for i := 0; i < n; i++ {
+		t := v.Type().Field(i)
+		name := t.Tag.Get("resource")
+		if name == "" {
+			name = t.Name
+		}
+		a[name] = v.Field(i)
+	}
+	return a
 }
 
 func makeHost(meta map[core.Key]string) *Host {
@@ -73,6 +149,7 @@ func makeHost(meta map[core.Key]string) *Host {
 
 	h.Meta.AgentName = "mackerel-exporter (ot)"
 	h.Meta.AgentVersion = "0.1"
+	return &h
 }
 
 func customIdentifier(meta map[core.Key]string) string {

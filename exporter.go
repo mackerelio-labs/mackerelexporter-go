@@ -2,6 +2,7 @@ package mackerel
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
