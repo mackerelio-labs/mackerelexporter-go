@@ -172,26 +172,45 @@ func collectFields(v reflect.Value) map[string]reflect.Value {
 	return a
 }
 
-type Host struct {
-	Name             string
-	CustomIdentifier string
-	Meta             map[string]interface{}
-}
-
-func makeHost(res *Resource) *Host {
-	var h Host
-	h.Name = res.Host.Name
-	if h.Name == "" {
-		h.Name = res.Service.Instance.ID
+// UpsertHost update or insert the host with res.
+func (e *Exporter) UpsertHost(res *Resource) (hostID string, err error) {
+	// TODO(lufia): We would require to redesign whether using mackerel-client-go or not.
+	param := mackerel.CreateHostParam{
+		Name:             hostname(res),
+		CustomIdentifier: customIdentifier(res),
 	}
-	if h.Name == "" {
-		if name, err := os.Hostname(); err == nil {
-			h.Name = name
+	if res.Cloud.Provider != "" {
+		param.Meta = mackerel.HostMeta{
+			Cloud: &mackerel.Cloud{
+				Provider: res.Cloud.Provider,
+			},
 		}
 	}
-	h.CustomIdentifier = customIdentifier(res)
-	// TODO(lufia): Should we set any values to h.Meta?
-	return &h
+
+	hostID = res.Host.ID
+	if hostID == "" {
+		hostID, err = e.lookupHostID(param.CustomIdentifier)
+		if err != nil {
+			return
+		}
+	}
+	if hostID == "" {
+		return e.c.CreateHost(&param)
+	}
+	return e.c.UpdateHost(hostID, (*mackerel.UpdateHostParam)(&param))
+}
+
+func hostname(res *Resource) string {
+	if res.Host.Name != "" {
+		return res.Host.Name
+	}
+	if res.Service.Instance.ID != "" {
+		return res.Service.Instance.ID
+	}
+	if s, err := os.Hostname(); err == nil {
+		return s
+	}
+	return ""
 }
 
 func customIdentifier(res *Resource) string {
@@ -207,35 +226,6 @@ func customIdentifier(res *Resource) string {
 		a = append(a, s)
 	}
 	return strings.Join(a, ".")
-}
-
-// UpsertHost update or insert the host with res.
-func (e *Exporter) UpsertHost(res *Resource) (hostID string, err error) {
-	h := makeHost(res)
-	param := mackerel.CreateHostParam{
-		Name:             h.Name,
-		CustomIdentifier: h.CustomIdentifier,
-	}
-	if res.Cloud.Provider != "" {
-		param.Meta = mackerel.HostMeta{
-			Cloud: &mackerel.Cloud{
-				Provider: res.Cloud.Provider,
-			},
-		}
-	}
-
-	id := res.Host.ID
-	if id == "" {
-		id, err = e.lookupHostID(h.CustomIdentifier)
-		if err != nil {
-			return
-		}
-	}
-	if id != "" {
-		// TODO(lufia): we should update a host
-		return id, nil // The host was already registered
-	}
-	return e.c.CreateHost(&param)
 }
 
 func (e *Exporter) lookupHostID(customIdentifier string) (string, error) {
