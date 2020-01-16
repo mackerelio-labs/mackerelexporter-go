@@ -40,3 +40,26 @@ func IsSystemMetric(s string) bool {
 	}
 	return false
 }
+
+const (
+	graphNameSep = "."
+)
+
+type GraphName string
+
+func (g GraphName) Match(s string) bool {
+	expr := strings.Split(string(g), graphNameSep)
+	a := strings.Split(s, graphNameSep)
+	if len(expr) != len(a) {
+		return false
+	}
+	for i := range expr {
+		if expr[i] == "#" || expr[i] == "*" {
+			continue
+		}
+		if expr[i] != a[i] {
+			return false
+		}
+	}
+	return true
+}

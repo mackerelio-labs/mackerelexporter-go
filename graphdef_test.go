@@ -46,3 +46,63 @@ func TestIsSystemMetric(t *testing.T) {
 		}
 	}
 }
+
+func TestGraphName(t *testing.T) {
+	tests := []struct {
+		name      GraphName
+		matches   []string
+		unmatches []string
+	}{
+		{
+			name: GraphName("memory.avail"),
+			matches: []string{
+				"memory.avail",
+			},
+			unmatches: []string{
+				"memory.usage",
+				"memory",
+				"memory.avail.min",
+			},
+		},
+		{
+			name: GraphName("custom.cpu.#.user"),
+			matches: []string{
+				"custom.cpu.x1.user",
+				"custom.cpu.x2.user",
+			},
+			unmatches: []string{
+				"custom.memory.x3.user",
+				"custom.cpu.x3.sys",
+				"custom.cpu.x3.user.min",
+			},
+		},
+		{
+			name: GraphName("custom.cpu.*.user"),
+			matches: []string{
+				"custom.cpu.x1.user",
+				"custom.cpu.x2.user",
+			},
+			unmatches: []string{
+				"custom.memory.x3.user",
+				"custom.cpu.x3.sys",
+				"custom.cpu.x3.user.min",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run("matches", func(t *testing.T) {
+			for _, s := range tt.matches {
+				if ok := tt.name.Match(s); !ok {
+					t.Errorf("%q.Match(%q) = %t", tt.name, s, ok)
+				}
+			}
+		})
+		t.Run("unmatches", func(t *testing.T) {
+			for _, s := range tt.unmatches {
+				if ok := tt.name.Match(s); ok {
+					t.Errorf("%q.Match(%q) = %t", tt.name, s, ok)
+				}
+			}
+		})
+	}
+}
