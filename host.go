@@ -65,36 +65,38 @@ func UnmarshalLabels(meta []core.KeyValue, data interface{}) error {
 		if !kv.Key.Defined() {
 			continue
 		}
-		keys := strings.Split(string(kv.Key), ".")
-		if err := unmarshalLabels(keys, kv.Value, v); err != nil {
-			return err
+		name := string(kv.Key)
+		keys := strings.Split(name, ".")
+		if err := unmarshalLabels("<data>", keys, kv.Value, v); err != nil {
+			return fmt.Errorf("cannot assign %s: %w", name, err)
 		}
 	}
 	return nil
 }
 
-func unmarshalLabels(keys []string, value core.Value, v reflect.Value) error {
+// name must mean v
+func unmarshalLabels(name string, keys []string, value core.Value, v reflect.Value) error {
 	switch kind := v.Type().Kind(); kind {
 	case reflect.Ptr:
-		return unmarshalLabels(keys, value, reflect.Indirect(v))
+		return unmarshalLabels(name, keys, value, reflect.Indirect(v))
 	case reflect.Struct:
 		if len(keys) == 0 {
-			return errors.New("missing")
+			return fmt.Errorf("%s is %v", name, kind)
 		}
 		fields := collectFields(v)
 		f, ok := fields[keys[0]]
 		if !ok {
 			return nil // ignore this field
 		}
-		return unmarshalLabels(keys[1:], value, f)
+		return unmarshalLabels(keys[0], keys[1:], value, f)
 	case reflect.Interface:
 		if v.IsNil() {
 			v.Set(reflect.ValueOf(map[string]interface{}{}))
 		}
-		return unmarshalLabels(keys, value, v.Elem())
+		return unmarshalLabels(name, keys, value, v.Elem())
 	case reflect.Map:
 		if len(keys) == 0 {
-			return errors.New("cannot map a value to a map")
+			return fmt.Errorf("%s is %v", name, kind)
 		}
 		key := reflect.ValueOf(keys[0])
 		if len(keys) == 1 {
@@ -106,13 +108,13 @@ func unmarshalLabels(keys []string, value core.Value, v reflect.Value) error {
 			p = reflect.ValueOf(map[string]interface{}{})
 			v.SetMapIndex(key, p)
 		}
-		if err := unmarshalLabels(keys[1:], value, p); err != nil {
+		if err := unmarshalLabels(keys[0], keys[1:], value, p); err != nil {
 			return err
 		}
 		return nil
 	case reflect.Bool:
 		if len(keys) != 0 {
-			return errors.New("overflow")
+			return fmt.Errorf("%s is %v", keys[0], kind)
 		}
 		if v.CanSet() {
 			v.SetBool(value.AsBool())
@@ -120,7 +122,7 @@ func unmarshalLabels(keys []string, value core.Value, v reflect.Value) error {
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if len(keys) != 0 {
-			return errors.New("overflow")
+			return fmt.Errorf("%s is %v", keys[0], kind)
 		}
 		if v.CanSet() {
 			v.SetInt(value.AsInt64())
@@ -128,7 +130,7 @@ func unmarshalLabels(keys []string, value core.Value, v reflect.Value) error {
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		if len(keys) != 0 {
-			return errors.New("overflow")
+			return fmt.Errorf("%s is %v", keys[0], kind)
 		}
 		if v.CanSet() {
 			v.SetUint(value.AsUint64())
@@ -136,7 +138,7 @@ func unmarshalLabels(keys []string, value core.Value, v reflect.Value) error {
 		return nil
 	case reflect.Float32, reflect.Float64:
 		if len(keys) != 0 {
-			return errors.New("overflow")
+			return fmt.Errorf("%s is %v", keys[0], kind)
 		}
 		if v.CanSet() {
 			v.SetFloat(value.AsFloat64())
@@ -144,7 +146,7 @@ func unmarshalLabels(keys []string, value core.Value, v reflect.Value) error {
 		return nil
 	case reflect.String:
 		if len(keys) != 0 {
-			return errors.New("overflow")
+			return fmt.Errorf("%s is %v", keys[0], kind)
 		}
 		if v.CanSet() {
 			v.SetString(value.AsString())
@@ -152,7 +154,7 @@ func unmarshalLabels(keys []string, value core.Value, v reflect.Value) error {
 		return nil
 	default:
 		//  Uintptr
-		return fmt.Errorf("unsupported type: %v", kind)
+		return fmt.Errorf("%s: unsupported type: %v", name, kind)
 	}
 }
 
