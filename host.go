@@ -12,8 +12,10 @@ import (
 )
 
 type Resource struct {
-	Service ServiceResource `resource:"service"`
-	Host    HostResource    `resource:"host"`
+	Service ServiceResource  `resource:"service"`
+	Host    HostResource     `resource:"host"`
+	Cloud   CloudResource    `resource:"cloud"`
+	Mackrel MackerelResource `resource:"mackerel"`
 }
 
 type ServiceResource struct {
@@ -32,25 +34,15 @@ type HostResource struct {
 	Name string `resource:"name"`
 }
 
-type Host struct {
-	Name             string
-	CustomIdentifier string
-	Meta             HostMeta
-
-	//Roles            Roles
-	//Interfaces       []Interface
+type CloudResource struct {
+	Provider string `resource:"provider"`
 }
 
-type HostMeta struct {
-	AgentVersion string
-	AgentName    string
-	CPUName      string
-	CPUMHz       int
-
-	//BlockDevice   BlockDevice
-	//Filesystem    FileSystem
-	//Memory        Memory
-	//Cloud         *Cloud
+// MackerelResource represents Mackerel specific resources.
+type MackerelResource struct {
+	Metric struct {
+		Class string `resource:"class"`
+	} `resource:"metric"`
 }
 
 // UnmarshalLabels marshals ...
@@ -167,69 +159,68 @@ func collectFields(v reflect.Value) map[string]reflect.Value {
 	return a
 }
 
-func makeHost(meta map[core.Key]string) *Host {
+type Host struct {
+	Name             string
+	CustomIdentifier string
+	Meta             map[string]interface{}
+}
+
+func makeHost(res *Resource) *Host {
 	var h Host
-	if name, err := os.Hostname(); err == nil {
-		h.Name = name
+	h.Name = res.Host.Name
+	if h.Name == "" {
+		h.Name = res.Service.Instance.ID
 	}
-	if name, ok := meta[keyHostName]; ok {
-		h.Name = name
+	if h.Name == "" {
+		if name, err := os.Hostname(); err == nil {
+			h.Name = name
+		}
 	}
-
-	if id, ok := meta[keyServiceInstanceID]; ok {
-		h.CustomIdentifier = id
-	}
-
-	h.Meta.AgentName = "mackerel-exporter (ot)"
-	h.Meta.AgentVersion = "0.1"
+	h.CustomIdentifier = customIdentifier(res)
+	// TODO(lufia): Should we set any values to h.Meta?
 	return &h
 }
 
-func customIdentifier(meta map[core.Key]string) string {
+func customIdentifier(res *Resource) string {
+	// TODO(lufia): This may change to equal to mackerel-agent.
 	a := make([]string, 0, 3)
-	if s, ok := meta[keyServiceNS]; ok {
+	if s := res.Service.NS; s != "" {
 		a = append(a, s)
 	}
-	s, ok := meta[keyServiceName]
-	if !ok {
-		return "" // wrong; service.name is required
+	if s := res.Service.Name; s != "" {
+		a = append(a, s)
 	}
-	a = append(a, s)
-	s, ok = meta[keyServiceInstanceID]
-	if !ok {
-		return "" // wrong; service.instance.id is required
+	if s := res.Service.Instance.ID; s != "" {
+		a = append(a, s)
 	}
-	a = append(a, s)
 	return strings.Join(a, ".")
 }
 
-func (e *Exporter) upsertHost(h *Host) (string, error) {
-	id, err := e.lookupHostID(h.CustomIdentifier)
-	if err != nil {
-		return "", err
+// UpsertHost update or insert the host with res.
+func (e *Exporter) UpsertHost(res *Resource) (hostID string, err error) {
+	h := makeHost(res)
+	param := mackerel.CreateHostParam{
+		Name:             h.Name,
+		CustomIdentifier: h.CustomIdentifier,
+	}
+	if res.Cloud.Provider != "" {
+		param.Meta = mackerel.HostMeta{
+			Cloud: &mackerel.Cloud{
+				Provider: res.Cloud.Provider,
+			},
+		}
+	}
+
+	id := res.Host.ID
+	if id == "" {
+		id, err = e.lookupHostID(h.CustomIdentifier)
+		if err != nil {
+			return
+		}
 	}
 	if id != "" {
 		// TODO(lufia): we should update a host
 		return id, nil // The host was already registered
-	}
-
-	cpu0 := map[string]interface{}{
-		"model_name": h.Meta.CPUName,
-		"mhz":        h.Meta.CPUMHz,
-	}
-	param := mackerel.CreateHostParam{
-		Name:             h.Name,
-		CustomIdentifier: h.CustomIdentifier,
-		Meta: mackerel.HostMeta{
-			AgentVersion: h.Meta.AgentVersion,
-			AgentName:    h.Meta.AgentName,
-			CPU:          mackerel.CPU{cpu0},
-			Kernel: map[string]string{
-				"os":      "Plan 9",
-				"release": "4e",
-				"version": "2000",
-			},
-		},
 	}
 	return e.c.CreateHost(&param)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/api/core"
@@ -35,7 +36,7 @@ var (
 	keyHostName          = core.Key("host.name")
 	keyCloudProvider     = core.Key("cloud.provider")
 
-	keyMetricClass = core.Key("metric.class") // for graph-def
+	keyMetricClass = core.Key("mackerel.metric.class") // for graph-def
 
 	requiredKeys = []core.Key{
 		keyServiceName,
@@ -85,6 +86,9 @@ func WithAPIKey(apiKey string) func(o *options) {
 type Exporter struct {
 	quantile float64
 	c        *mackerel.Client
+
+	once   sync.Once
+	hostID string
 }
 
 var _ export.Exporter = &Exporter{}
@@ -134,27 +138,27 @@ func (e *Exporter) convertToHostMetric(r export.Record) *mackerel.HostMetricValu
 	aggr := r.Aggregator()
 	kind := desc.NumberKind()
 
-	meta := hostMetaFromLabels(r.Labels().Ordered())
-	hostID := meta[keyHostID]
+	var res Resource
+	if err := UnmarshalLabels(r.Labels().Ordered(), &res); err != nil {
+		// TODO(lufia): error?
+		return nil
+	}
+	var err error
+	e.once.Do(func() {
+		e.hostID, err = e.UpsertHost(&res)
+	})
+	if err != nil {
+		// TODO(lufia): error?
+		return nil
+	}
 
 	// TODO(lufia): if hostID is not set, it's the service metric.
 
 	m := metricValue(name, aggr, kind)
 	return &mackerel.HostMetricValue{
-		HostID:      hostID,
+		HostID:      res.Host.ID,
 		MetricValue: m,
 	}
-}
-
-func hostMetaFromLabels(labels []core.KeyValue) map[core.Key]string {
-	m := make(map[core.Key]string)
-	for _, kv := range labels {
-		if !kv.Key.Defined() {
-			continue
-		}
-		m[kv.Key] = kv.Value.Emit()
-	}
-	return m
 }
 
 // Deprecated: We might use labels; {class=custom.xxx.#.*.name}
