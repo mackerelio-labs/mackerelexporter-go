@@ -11,19 +11,25 @@ import (
 	"go.opentelemetry.io/otel/api/core"
 )
 
-type Meta struct {
-	Service ServiceMeta `resource:"service"`
+type Resource struct {
+	Service ServiceResource `resource:"service"`
+	Host    HostResource    `resource:"host"`
 }
 
-type ServiceMeta struct {
-	Name     string       `resource:"name"`
-	NS       string       `resource:"namespace"`
-	Instance InstanceMeta `resource:"instance"`
-	Version  string       `resource:"version"`
+type ServiceResource struct {
+	Name     string           `resource:"name"`
+	NS       string           `resource:"namespace"`
+	Instance InstanceResource `resource:"instance"`
+	Version  string           `resource:"version"`
 }
 
-type InstanceMeta struct {
+type InstanceResource struct {
 	ID string `resource:"id"`
+}
+
+type HostResource struct {
+	ID   string `resource:"id"`
+	Name string `resource:"name"`
 }
 
 type Host struct {
@@ -47,25 +53,25 @@ type HostMeta struct {
 	//Cloud         *Cloud
 }
 
-// UnmarshalHost marshals
-func UnmarshalHost(meta []core.KeyValue, data interface{}) error {
+// UnmarshalLabels marshals ...
+func UnmarshalLabels(meta []core.KeyValue, data interface{}) error {
 	v := reflect.ValueOf(data)
 	for _, kv := range meta {
 		if !kv.Key.Defined() {
 			continue
 		}
 		keys := strings.Split(string(kv.Key), ".")
-		if err := unmarshalHost(keys, kv.Value, v); err != nil {
+		if err := unmarshalLabels(keys, kv.Value, v); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func unmarshalHost(keys []string, value core.Value, v reflect.Value) error {
+func unmarshalLabels(keys []string, value core.Value, v reflect.Value) error {
 	switch kind := v.Type().Kind(); kind {
 	case reflect.Ptr:
-		return unmarshalHost(keys, value, reflect.Indirect(v))
+		return unmarshalLabels(keys, value, reflect.Indirect(v))
 	case reflect.Struct:
 		if len(keys) == 0 {
 			return errors.New("missing")
@@ -75,12 +81,12 @@ func unmarshalHost(keys []string, value core.Value, v reflect.Value) error {
 		if !ok {
 			return nil // ignore this field
 		}
-		return unmarshalHost(keys[1:], value, f)
+		return unmarshalLabels(keys[1:], value, f)
 	case reflect.Interface:
 		if v.IsNil() {
 			v.Set(reflect.ValueOf(map[string]interface{}{}))
 		}
-		return unmarshalHost(keys, value, v.Elem())
+		return unmarshalLabels(keys, value, v.Elem())
 	case reflect.Map:
 		if len(keys) == 0 {
 			return errors.New("cannot map a value to a map")
@@ -95,7 +101,7 @@ func unmarshalHost(keys []string, value core.Value, v reflect.Value) error {
 			p = reflect.ValueOf(map[string]interface{}{})
 			v.SetMapIndex(key, p)
 		}
-		if err := unmarshalHost(keys[1:], value, p); err != nil {
+		if err := unmarshalLabels(keys[1:], value, p); err != nil {
 			return err
 		}
 		return nil

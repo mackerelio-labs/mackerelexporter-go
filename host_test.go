@@ -7,12 +7,12 @@ import (
 	"go.opentelemetry.io/otel/api/core"
 )
 
-func TestUnmarshalHost(t *testing.T) {
-	want := Meta{
-		Service: ServiceMeta{
+func TestUnmarshalLabels(t *testing.T) {
+	want := Resource{
+		Service: ServiceResource{
 			Name:     "name",
 			NS:       "ns1",
-			Instance: InstanceMeta{ID: "0000-1111"},
+			Instance: InstanceResource{ID: "0000-1111"},
 			Version:  "a:1.1",
 		},
 	}
@@ -22,21 +22,21 @@ func TestUnmarshalHost(t *testing.T) {
 		core.Key("service.instance.id").String(want.Service.Instance.ID),
 		core.Key("service.version").String(want.Service.Version),
 	}
-	var m Meta
-	if err := UnmarshalHost(labels, &m); err != nil {
+	var m Resource
+	if err := UnmarshalLabels(labels, &m); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(m, want) {
-		t.Errorf("Meta = %v; want %v", m, want)
+		t.Errorf("Resource = %v; want %v", m, want)
 	}
 }
 
-func TestUnmarshalHostInterface(t *testing.T) {
-	want := Meta{
-		Service: ServiceMeta{
+func TestUnmarshalLabelsInterface(t *testing.T) {
+	want := Resource{
+		Service: ServiceResource{
 			Name:     "name",
 			NS:       "ns1",
-			Instance: InstanceMeta{ID: "0000-1111"},
+			Instance: InstanceResource{ID: "0000-1111"},
 			Version:  "a:1.1",
 		},
 	}
@@ -47,7 +47,7 @@ func TestUnmarshalHostInterface(t *testing.T) {
 		core.Key("service.version").String(want.Service.Version),
 	}
 	var v interface{}
-	if err := UnmarshalHost(labels, &v); err != nil {
+	if err := UnmarshalLabels(labels, &v); err != nil {
 		t.Fatal(err)
 	}
 	if s, ok := lookupInterfaceMap(v, "service", "name").(string); !ok || s != want.Service.Name {
