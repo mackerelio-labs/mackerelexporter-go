@@ -11,6 +11,19 @@ import (
 	"go.opentelemetry.io/otel/api/core"
 )
 
+var (
+	// see https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/data-resource-semantic-conventions.md
+	keyServiceNS         = core.Key("service.namespace")
+	keyServiceName       = core.Key("service.name")
+	keyServiceInstanceID = core.Key("service.instance.id")
+	keyServiceVersion    = core.Key("service.version")
+	keyHostID            = core.Key("host.id")
+	keyHostName          = core.Key("host.name")
+	keyCloudProvider     = core.Key("cloud.provider")
+
+	keyMetricClass = core.Key("mackerel.metric.class") // for graph-def
+)
+
 type Resource struct {
 	Service ServiceResource  `resource:"service"`
 	Host    HostResource     `resource:"host"`
