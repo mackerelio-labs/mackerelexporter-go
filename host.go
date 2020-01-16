@@ -47,6 +47,7 @@ type HostMeta struct {
 	//Cloud         *Cloud
 }
 
+// UnmarshalHost marshals
 func UnmarshalHost(meta []core.KeyValue, data interface{}) error {
 	v := reflect.ValueOf(data)
 	for _, kv := range meta {
@@ -75,7 +76,28 @@ func unmarshalHost(keys []string, value core.Value, v reflect.Value) error {
 			return nil // ignore this field
 		}
 		return unmarshalHost(keys[1:], value, f)
+	case reflect.Interface:
+		if v.IsNil() {
+			v.Set(reflect.ValueOf(map[string]interface{}{}))
+		}
+		return unmarshalHost(keys, value, v.Elem())
 	case reflect.Map:
+		if len(keys) == 0 {
+			return errors.New("cannot map a value to a map")
+		}
+		key := reflect.ValueOf(keys[0])
+		if len(keys) == 1 {
+			v.SetMapIndex(key, reflect.ValueOf(value.Emit()))
+			return nil
+		}
+		p := v.MapIndex(key)
+		if !p.IsValid() {
+			p = reflect.ValueOf(map[string]interface{}{})
+			v.SetMapIndex(key, p)
+		}
+		if err := unmarshalHost(keys[1:], value, p); err != nil {
+			return err
+		}
 		return nil
 	case reflect.Bool:
 		if len(keys) != 0 {
