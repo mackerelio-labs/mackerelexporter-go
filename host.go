@@ -48,23 +48,23 @@ type HostMeta struct {
 }
 
 func UnmarshalHost(meta []core.KeyValue, data interface{}) error {
+	v := reflect.ValueOf(data)
 	for _, kv := range meta {
 		if !kv.Key.Defined() {
 			continue
 		}
 		keys := strings.Split(string(kv.Key), ".")
-		if err := unmarshalHost(keys, kv.Value, data); err != nil {
+		if err := unmarshalHost(keys, kv.Value, v); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func unmarshalHost(keys []string, value core.Value, data interface{}) error {
-	v := reflect.Indirect(reflect.ValueOf(data))
+func unmarshalHost(keys []string, value core.Value, v reflect.Value) error {
 	switch kind := v.Type().Kind(); kind {
 	case reflect.Ptr:
-		return unmarshalHost(keys, value, v.Interface())
+		return unmarshalHost(keys, value, reflect.Indirect(v))
 	case reflect.Struct:
 		if len(keys) == 0 {
 			return errors.New("missing")
@@ -81,40 +81,44 @@ func unmarshalHost(keys []string, value core.Value, data interface{}) error {
 		if len(keys) != 0 {
 			return errors.New("overflow")
 		}
-		if !v.CanSet() {
-			return nil
+		if v.CanSet() {
+			v.SetBool(value.AsBool())
 		}
-		v.SetBool(value.AsBool())
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if len(keys) != 0 {
 			return errors.New("overflow")
 		}
-		if !v.CanSet() {
-			return nil
+		if v.CanSet() {
+			v.SetInt(value.AsInt64())
 		}
-		v.SetInt(value.AsInt64())
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		if len(keys) != 0 {
 			return errors.New("overflow")
 		}
-		if !v.CanSet() {
-			return nil
+		if v.CanSet() {
+			v.SetUint(value.AsUint64())
 		}
-		v.SetUint(value.AsUint64())
 		return nil
 	case reflect.Float32, reflect.Float64:
 		if len(keys) != 0 {
 			return errors.New("overflow")
 		}
-		if !v.CanSet() {
-			return nil
+		if v.CanSet() {
+			v.SetFloat(value.AsFloat64())
 		}
-		v.SetFloat(value.AsFloat64())
 		return nil
-	// 	Uintptr
+	case reflect.String:
+		if len(keys) != 0 {
+			return errors.New("overflow")
+		}
+		if v.CanSet() {
+			v.SetString(value.AsString())
+		}
+		return nil
 	default:
+		//  Uintptr
 		return fmt.Errorf("unsupported type: %v", kind)
 	}
 }
@@ -122,12 +126,13 @@ func unmarshalHost(keys []string, value core.Value, data interface{}) error {
 // collectFields returns a map pointed to fields by the `meta` tag.
 func collectFields(v reflect.Value) map[string]reflect.Value {
 	a := make(map[string]reflect.Value)
+	t := v.Type()
 	n := v.NumField()
 	for i := 0; i < n; i++ {
-		t := v.Type().Field(i)
-		name := t.Tag.Get("resource")
+		f := t.Field(i)
+		name := f.Tag.Get("resource")
 		if name == "" {
-			name = t.Name
+			name = f.Name
 		}
 		a[name] = v.Field(i)
 	}
