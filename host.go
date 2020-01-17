@@ -175,7 +175,7 @@ func collectFields(v reflect.Value) map[string]reflect.Value {
 }
 
 // UpsertHost update or insert the host with res.
-func (e *Exporter) UpsertHost(res *Resource) (hostID string, err error) {
+func (e *Exporter) UpsertHost(res *Resource) (string, error) {
 	// TODO(lufia): We would require to redesign whether using mackerel-client-go or not.
 	param := mackerel.CreateHostParam{
 		Name:             hostname(res),
@@ -189,12 +189,9 @@ func (e *Exporter) UpsertHost(res *Resource) (hostID string, err error) {
 		}
 	}
 
-	hostID = res.Host.ID
-	if hostID == "" {
-		hostID, err = e.lookupHostID(param.CustomIdentifier)
-		if err != nil {
-			return
-		}
+	hostID, err := e.lookupHostID(param.CustomIdentifier)
+	if err != nil {
+		return "", err
 	}
 	if hostID == "" {
 		return e.c.CreateHost(&param)
@@ -207,6 +204,7 @@ func hostname(res *Resource) string {
 		return res.Host.Name
 	}
 	if res.Service.Instance.ID != "" {
+		// TODO(lufia): service.name
 		return res.Service.Instance.ID
 	}
 	if s, err := os.Hostname(); err == nil {
@@ -216,6 +214,10 @@ func hostname(res *Resource) string {
 }
 
 func customIdentifier(res *Resource) string {
+	if res.Host.ID != "" {
+		return res.Host.ID
+	}
+
 	// TODO(lufia): This may change to equal to mackerel-agent.
 	a := make([]string, 0, 3)
 	if s := res.Service.NS; s != "" {
