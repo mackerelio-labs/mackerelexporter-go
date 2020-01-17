@@ -4,26 +4,38 @@ import (
 	"testing"
 )
 
-func TestSplitGraphName(t *testing.T) {
+func TestGeneralizeMetricName(t *testing.T) {
 	tests := []struct {
 		name string
-
-		group  string
-		metric string
+		want string
 	}{
-		{name: "memory/available", group: "memory", metric: "available"},
-		{name: "memory/", group: "memory", metric: ""},
-		{name: "/available", group: "", metric: "available"},
-		{name: "os.name", group: "", metric: "os_name"},
-		{name: "mackerel.io/name", group: "mackerel_io", metric: "name"},
+		{name: "memory.available", want: "memory.*"},
+		{name: "memory.*", want: "memory.*"},
+		{name: "memory.*.usage", want: "memory.*.usage"},
+		{name: "memory.#.usage", want: "memory.#.*"},
+		{name: "memory.#", want: "memory.#"},
 	}
 	for _, tt := range tests {
-		s1, s2 := SplitGraphName(tt.name)
-		if s1 != tt.group {
-			t.Errorf("SplitGraphName(%q) = (%q, %q); want (%q, %q)", tt.name, s1, s2, tt.group, tt.metric)
+		s := GeneralizeMetricName(tt.name)
+		if s != tt.want {
+			t.Errorf("GeneralizeMetricName(%q) = %q; want %q", tt.name, s, tt.want)
 		}
-		if s2 != tt.metric {
-			t.Errorf("SplitGraphName(%q) = (%q, %q); want (%q, %q)", tt.name, s1, s2, tt.group, tt.metric)
+	}
+}
+
+func TestNormalizeMetricName(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{name: "abc.def", want: "abc.def"},
+		{name: "custom.#.*.t-x_a", want: "custom.#.*.t-x_a"},
+		{name: "aaa.$!.bb", want: "aaa.__.bb"},
+	}
+	for _, tt := range tests {
+		s := NormalizeMetricName(tt.name)
+		if s != tt.want {
+			t.Errorf("NormalizeMetricName(%q) = %q; want %q", tt.name, s, tt.want)
 		}
 	}
 }
@@ -33,11 +45,12 @@ func TestIsSystemMetric(t *testing.T) {
 		name string
 		want bool
 	}{
-		{name: "memory/used", want: true},
-		{name: "memory/total", want: true},
-		{name: "memory/xxx", want: false},
-		{name: "xmemory/used", want: false},
-		{name: "memory/usedx", want: false},
+		{name: "memory.used", want: true},
+		{name: "memory.total", want: true},
+		{name: "memory.xxx", want: false},
+		{name: "xmemory.used", want: false},
+		{name: "memory.usedx", want: false},
+		{name: "filesystem.sdC0.size", want: true},
 	}
 	for _, tt := range tests {
 		v := IsSystemMetric(tt.name)
@@ -49,12 +62,12 @@ func TestIsSystemMetric(t *testing.T) {
 
 func TestGraphName(t *testing.T) {
 	tests := []struct {
-		name      GraphName
+		name      MetricName
 		matches   []string
 		unmatches []string
 	}{
 		{
-			name: GraphName("memory.avail"),
+			name: "memory.avail",
 			matches: []string{
 				"memory.avail",
 			},
@@ -65,7 +78,7 @@ func TestGraphName(t *testing.T) {
 			},
 		},
 		{
-			name: GraphName("custom.cpu.#.user"),
+			name: "custom.cpu.#.user",
 			matches: []string{
 				"custom.cpu.x1.user",
 				"custom.cpu.x2.user",
@@ -77,7 +90,7 @@ func TestGraphName(t *testing.T) {
 			},
 		},
 		{
-			name: GraphName("custom.cpu.*.user"),
+			name: "custom.cpu.*.user",
 			matches: []string{
 				"custom.cpu.x1.user",
 				"custom.cpu.x2.user",

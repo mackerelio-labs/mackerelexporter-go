@@ -25,10 +25,10 @@ var (
 )
 
 type Resource struct {
-	Service ServiceResource  `resource:"service"`
-	Host    HostResource     `resource:"host"`
-	Cloud   CloudResource    `resource:"cloud"`
-	Mackrel MackerelResource `resource:"mackerel"`
+	Service  ServiceResource  `resource:"service"`
+	Host     HostResource     `resource:"host"`
+	Cloud    CloudResource    `resource:"cloud"`
+	Mackerel MackerelResource `resource:"mackerel"`
 }
 
 type ServiceResource struct {

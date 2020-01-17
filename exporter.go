@@ -2,8 +2,6 @@ package mackerel
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"sync"
 	"time"
 
@@ -69,8 +67,9 @@ type Exporter struct {
 	quantile float64
 	c        *mackerel.Client
 
-	once   sync.Once
-	hostID string
+	mu        sync.Mutex
+	hostID    string
+	graphDefs map[MetricName]struct{}
 }
 
 var _ export.Exporter = &Exporter{}
@@ -89,19 +88,11 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 	}, nil
 }
 
-func validate(r export.Record) error {
-	return errors.New("not implement")
-}
-
 func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
-	// TODO(lufia): desc.Description will be used for graph-def.
-	a.ForEach(func(r export.Record) {
-		if err := validate(r); err != nil {
-		}
-	})
-
 	var metrics []*mackerel.HostMetricValue
 	a.ForEach(func(r export.Record) {
+		e.postHostAndGraphDefs(r)
+
 		m := e.convertToHostMetric(r)
 		if m == nil {
 			return
@@ -114,39 +105,64 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	return nil
 }
 
-func (e *Exporter) convertToHostMetric(r export.Record) *mackerel.HostMetricValue {
-	desc := r.Descriptor()
-	name := cleanName(desc.Name())
-	aggr := r.Aggregator()
-	kind := desc.NumberKind()
+func (e *Exporter) postHostAndGraphDefs(r export.Record) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
-	var res Resource
-	if err := UnmarshalLabels(r.Labels().Ordered(), &res); err != nil {
-		// TODO(lufia): error?
+	desc := r.Descriptor()
+	name := NormalizeMetricName(desc.Name())
+	if e.isGraphRegistered(name) {
 		return nil
 	}
-	var err error
-	e.once.Do(func() {
-		e.hostID, err = e.UpsertHost(&res)
-	})
-	if err != nil {
-		// TODO(lufia): error?
-		return nil
+
+	var res Resource
+	labels := r.Labels().Ordered()
+	if err := UnmarshalLabels(labels, &res); err != nil {
+		return err
 	}
 
 	// TODO(lufia): if hostID is not set, it's the service metric.
+	if e.hostID == "" {
+		id, err := e.UpsertHost(&res)
+		if err != nil {
+			return err
+		}
+		e.hostID = id
+	}
+
+	metricClass := res.Mackerel.Metric.Class
+	if metricClass == "" {
+		metricClass = name
+	}
+	return e.registerGraph(MetricName(name))
+}
+
+func (e *Exporter) isGraphRegistered(name string) bool {
+	for g := range e.graphDefs {
+		if g.Match(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Exporter) registerGraph(name MetricName) error {
+	// TODO(lufia): implement
+	e.graphDefs[name] = struct{}{}
+	return nil
+}
+
+func (e *Exporter) convertToHostMetric(r export.Record) *mackerel.HostMetricValue {
+	desc := r.Descriptor()
+	name := NormalizeMetricName(desc.Name())
+	aggr := r.Aggregator()
+	kind := desc.NumberKind()
 
 	m := metricValue(name, aggr, kind)
 	return &mackerel.HostMetricValue{
-		HostID:      res.Host.ID,
+		HostID:      e.hostID,
 		MetricValue: m,
 	}
-}
-
-// Deprecated: We might use labels; {class=custom.xxx.#.*.name}
-func metricName(d *export.Descriptor) string {
-	s1, s2 := SplitGraphName(d.Name())
-	return strings.Join([]string{s1, s2}, ".")
 }
 
 func metricValue(name string, aggr export.Aggregator, kind core.NumberKind) *mackerel.MetricValue {
