@@ -1,15 +1,53 @@
 package mackerel
 
 import (
+	"errors"
 	"strings"
+
+	"go.opentelemetry.io/otel/api/unit"
 )
 
 // OpenTelemetry naming
 // https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/api-metrics-user.md
 
 const (
+	UnitDimensionless = unit.Dimensionless
+	UnitBytes         = unit.Bytes
+	UnitMilliseconds  = unit.Milliseconds
+
 	metricNameSep = "."
 )
+
+func GraphUnit(u unit.Unit) string {
+	// TODO(lufia): desc.NumberKind
+	switch u {
+	case unit.Dimensionless:
+		return "float"
+	case unit.Bytes:
+		return "bytes"
+	case unit.Milliseconds:
+		return "float"
+	default:
+		return "integer"
+	}
+}
+
+var errMismatch = errors.New("mismatched metric names")
+
+// AppendMetricNames returns s1 + rest of s2.
+func AppendMetricName(s1, s2 string) (string, error) {
+	a1 := strings.Split(s1, metricNameSep)
+	a2 := strings.Split(s2, metricNameSep)
+	if len(a1) > len(a2) {
+		return "", errMismatch
+	}
+	t := strings.Join(a2[:len(a1)], metricNameSep)
+	if !MetricName(s1).Match(t) {
+		return "", errMismatch
+	}
+	copy(a2[:len(a1)], a1)
+	return strings.Join(a2, metricNameSep), nil
+}
 
 // GeneralizeMetricName generalize "a.b" to "a.*" if s don't contain wildcards.
 func GeneralizeMetricName(s string) string {

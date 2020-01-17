@@ -2,12 +2,10 @@ package mackerel
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/api/core"
 	"go.opentelemetry.io/otel/api/global"
-	"go.opentelemetry.io/otel/api/unit"
 	export "go.opentelemetry.io/otel/sdk/export/metric"
 	"go.opentelemetry.io/otel/sdk/export/metric/aggregator"
 	metricsdk "go.opentelemetry.io/otel/sdk/metric"
@@ -16,12 +14,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 
 	"github.com/mackerelio/mackerel-client-go"
-)
-
-const (
-	UnitDimensionless = unit.Dimensionless
-	UnitBytes         = unit.Bytes
-	UnitMilliseconds  = unit.Milliseconds
 )
 
 // InstallNewPipeline instantiates a NewExportPipeline and registers it globally.
@@ -64,12 +56,10 @@ func WithAPIKey(apiKey string) func(o *options) {
 
 // Exporter is a stats exporter that uploads data to Mackerel.
 type Exporter struct {
-	quantile float64
-	c        *mackerel.Client
+	c *mackerel.Client
 
-	mu        sync.Mutex
-	hostID    string
-	graphDefs map[MetricName]struct{}
+	hosts     map[string]string // value is Mackerel's host ID
+	graphDefs map[string]*mackerel.GraphDefsParam
 }
 
 var _ export.Exporter = &Exporter{}
@@ -88,81 +78,118 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 	}, nil
 }
 
-func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
-	var metrics []*mackerel.HostMetricValue
-	a.ForEach(func(r export.Record) {
-		e.postHostAndGraphDefs(r)
+type registration struct {
+	res   *Resource
+	def   *mackerel.GraphDefsParam
+	value *mackerel.MetricValue
+}
 
-		m := e.convertToHostMetric(r)
-		if m == nil {
+func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
+	var regs []*registration
+	a.ForEach(func(r export.Record) {
+		reg, err := e.convertToRegistration(r)
+		if err != nil {
+			// TODO(lufia): output logs
 			return
 		}
-		metrics = append(metrics, m)
+		regs = append(regs, reg)
 	})
+
+	var metrics []*mackerel.HostMetricValue
+	graphDefs := make(map[string]*mackerel.GraphDefsParam)
+	for _, reg := range regs {
+		id := customIdentifier(reg.res)
+		if _, ok := e.hosts[id]; !ok {
+			h, err := e.UpsertHost(reg.res)
+			if err != nil {
+				return err
+			}
+			e.hosts[id] = h
+		}
+
+		name := reg.def.Metrics[0].Name
+		if g, ok := graphDefs[name]; ok {
+			g.Metrics = append(g.Metrics, reg.def.Metrics[0])
+		} else {
+			graphDefs[name] = reg.def
+		}
+
+		hostID := e.hosts[id]
+		metrics = append(metrics, &mackerel.HostMetricValue{
+			HostID:      hostID,
+			MetricValue: reg.value,
+		})
+		// TODO(lufia): post service metrics if host.id is not set and service.name is set.
+	}
+
+	var defs []*mackerel.GraphDefsParam
+	for _, d := range graphDefs {
+		defs = append(defs, d)
+	}
+	if err := e.c.CreateGraphDefs(defs); err != nil {
+		return err
+	}
+	e.mergeGraphDefs(graphDefs)
+
 	if err := e.c.PostHostMetricValues(metrics); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (e *Exporter) postHostAndGraphDefs(r export.Record) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	desc := r.Descriptor()
-	name := NormalizeMetricName(desc.Name())
-	if e.isGraphRegistered(name) {
-		return nil
+func (e *Exporter) mergeGraphDefs(defs map[string]*mackerel.GraphDefsParam) {
+	if e.graphDefs == nil {
+		e.graphDefs = make(map[string]*mackerel.GraphDefsParam)
 	}
+	for k, v := range defs {
+		if p, ok := e.graphDefs[k]; ok {
+			p.Metrics = append(p.Metrics, v.Metrics...)
+			continue
+		}
+		e.graphDefs[k] = v
+	}
+}
+
+func (e *Exporter) convertToRegistration(r export.Record) (*registration, error) {
+	desc := r.Descriptor()
+	aggr := r.Aggregator()
+	kind := desc.NumberKind()
 
 	var res Resource
 	labels := r.Labels().Ordered()
 	if err := UnmarshalLabels(labels, &res); err != nil {
-		return err
+		return nil, err
 	}
 
-	// TODO(lufia): if hostID is not set, it's the service metric.
-	if e.hostID == "" {
-		id, err := e.UpsertHost(&res)
-		if err != nil {
-			return err
-		}
-		e.hostID = id
-	}
-
-	metricClass := res.Mackerel.Metric.Class
-	if metricClass == "" {
-		metricClass = name
-	}
-	return e.registerGraph(MetricName(name))
-}
-
-func (e *Exporter) isGraphRegistered(name string) bool {
-	for g := range e.graphDefs {
-		if g.Match(name) {
-			return true
-		}
-	}
-	return false
-}
-
-func (e *Exporter) registerGraph(name MetricName) error {
-	// TODO(lufia): implement
-	e.graphDefs[name] = struct{}{}
-	return nil
-}
-
-func (e *Exporter) convertToHostMetric(r export.Record) *mackerel.HostMetricValue {
-	desc := r.Descriptor()
 	name := NormalizeMetricName(desc.Name())
-	aggr := r.Aggregator()
-	kind := desc.NumberKind()
+	gclass := NormalizeMetricName(res.Mackerel.Graph.Class)
+	mclass := NormalizeMetricName(res.Mackerel.Metric.Class)
+	switch {
+	case mclass == "" && gclass == "":
+		mclass = GeneralizeMetricName(name)
+		gclass = mclass
+	case mclass == "":
+		s, err := AppendMetricName(gclass, mclass)
+		if err != nil {
+			return nil, err
+		}
+		mclass = s
+	case gclass == "":
+		gclass = mclass
+	}
+	if !MetricName(mclass).Match(name) {
+		return nil, errMismatch
+	}
+	def := &mackerel.GraphDefsParam{
+		Name: "custom." + gclass,
+		Unit: GraphUnit(desc.Unit()),
+		Metrics: []*mackerel.GraphDefsMetric{
+			{Name: "custom." + mclass},
+		},
+	}
 
 	m := metricValue(name, aggr, kind)
-	return &mackerel.HostMetricValue{
-		HostID:      e.hostID,
-		MetricValue: m,
-	}
+	return &registration{res: &res, def: def, value: m}, nil
 }
 
 func metricValue(name string, aggr export.Aggregator, kind core.NumberKind) *mackerel.MetricValue {

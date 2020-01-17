@@ -4,6 +4,29 @@ import (
 	"testing"
 )
 
+func TestAppendMetricName(t *testing.T) {
+	tests := []struct {
+		hi   string
+		lo   string
+		want string
+	}{
+		{hi: "a.b", lo: "a.b.c", want: "a.b.c"},
+		{hi: "a.#", lo: "a.#.c", want: "a.#.c"},
+		{hi: "a.#", lo: "a.b.c", want: "a.#.c"},
+		{hi: "a.#", lo: "a.b.*", want: "a.#.*"},
+		{hi: "a.#.*.x", lo: "a.b.c.*", want: ""}, // fail
+	}
+	for _, tt := range tests {
+		s, err := AppendMetricName(tt.hi, tt.lo)
+		if s != tt.want {
+			t.Errorf("AppendMetricName(%q, %q) = %q; want %q", tt.hi, tt.lo, s, tt.want)
+		}
+		if tt.want == "" && err == nil {
+			t.Errorf("AppendMetricName(%q, %q): want an error", tt.hi, tt.lo)
+		}
+	}
+}
+
 func TestGeneralizeMetricName(t *testing.T) {
 	tests := []struct {
 		name string

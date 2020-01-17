@@ -21,7 +21,9 @@ var (
 	keyHostName          = core.Key("host.name")
 	keyCloudProvider     = core.Key("cloud.provider")
 
-	keyMetricClass = core.Key("mackerel.metric.class") // for graph-def
+	// for graph-def
+	keyGraphClass  = core.Key("mackerel.graph.class")
+	keyMetricClass = core.Key("mackerel.metric.class")
 )
 
 type Resource struct {
@@ -56,6 +58,9 @@ type MackerelResource struct {
 	Metric struct {
 		Class string `resource:"class"`
 	} `resource:"metric"`
+	Graph struct {
+		Class string `resource:"class"`
+	} `resource:"graph"`
 }
 
 // UnmarshalLabels marshals ...
