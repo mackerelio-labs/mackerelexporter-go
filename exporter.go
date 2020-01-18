@@ -104,6 +104,9 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 			if err != nil {
 				return err
 			}
+			if e.hosts == nil {
+				e.hosts = make(map[string]string)
+			}
 			e.hosts[id] = h
 		}
 
