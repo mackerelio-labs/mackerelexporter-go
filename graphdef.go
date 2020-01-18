@@ -53,24 +53,27 @@ func NewGraphDef(name string, opts GraphDefOptions) (*mackerel.GraphDefsParam, e
 	}
 	return &mackerel.GraphDefsParam{
 		Name: "custom." + opts.Name,
-		Unit: GraphUnit(opts.Unit),
+		Unit: graphUnit(opts.Unit, opts.Kind),
 		Metrics: []*mackerel.GraphDefsMetric{
 			{Name: "custom." + opts.MetricName},
 		},
 	}, nil
 }
 
-func GraphUnit(u unit.Unit) string {
-	// TODO(lufia): desc.NumberKind
+func graphUnit(u unit.Unit, kind core.NumberKind) string {
 	switch u {
-	case unit.Dimensionless:
-		return "float"
 	case unit.Bytes:
 		return "bytes"
-	case unit.Milliseconds:
-		return "float"
-	default:
+	case unit.Dimensionless, unit.Milliseconds:
+		if kind == core.Float64NumberKind {
+			return "float"
+		}
 		return "integer"
+	default:
+		if kind == core.Float64NumberKind {
+			return "float"
+		}
+		return "float"
 	}
 }
 
