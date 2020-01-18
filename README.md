@@ -5,6 +5,7 @@ This is the OpenTelemetry Exporter for Mackerel.
 ```go
 import (
 	"context"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel/api/global"
@@ -14,15 +15,18 @@ import (
 	"github.com/lufia/mackerelexporter"
 )
 
-func main() {
-	pusher, _ := mackerel.InstallNewPipeline()
-	defer pusher.Close()
-
+var (
 	// These keys are mapped to Mackerel's attributes.
-	keyHostID := key.New("host.id") // custom identifier
-	keyHostName := key.New("host.name") // hostname
-	keyGraphClass := key.New("mackerel.graph.class") // graph-defs's name
-	keyMetricClass := key.New("mackerel.metric.class") // graph-defs's metric name
+	keyHostID      = key.New("host.id")               // custom identifier
+	keyHostName    = key.New("host.name")             // hostname
+	keyGraphClass  = key.New("mackerel.graph.class")  // graph-def's name
+	keyMetricClass = key.New("mackerel.metric.class") // graph-def's metric name
+)
+
+func main() {
+	apiKey := os.Getenv("MACKEREL_APIKEY")
+	pusher, _ := mackerel.InstallNewPipeline(mackerel.WithAPIKey(apiKey))
+	defer pusher.Stop()
 
 	meter := global.MeterProvider().Meter("example")
 	firestoreRead := meter.NewInt64Counter("storage.firestore.read", metric.WithKeys(
@@ -35,7 +39,6 @@ func main() {
 		keyMetricClass.String("storage.#.*"),
 	)
 	ctx := context.Background()
-
 	firestoreRead.Add(ctx, 100, labels)
 
 	v := firestoreRead.Bind(labels)
