@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestAppendMetricName(t *testing.T) {
+func TestBindGraphMetricName(t *testing.T) {
 	tests := []struct {
 		hi   string
 		lo   string
@@ -17,12 +17,12 @@ func TestAppendMetricName(t *testing.T) {
 		{hi: "a.#.*.x", lo: "a.b.c.*", want: ""}, // fail
 	}
 	for _, tt := range tests {
-		s, err := AppendMetricName(tt.hi, tt.lo)
+		s, err := bindGraphMetricName(tt.hi, tt.lo)
 		if s != tt.want {
-			t.Errorf("AppendMetricName(%q, %q) = %q; want %q", tt.hi, tt.lo, s, tt.want)
+			t.Errorf("bindGraphMetricName(%q, %q) = %q; want %q", tt.hi, tt.lo, s, tt.want)
 		}
 		if tt.want == "" && err == nil {
-			t.Errorf("AppendMetricName(%q, %q): want an error", tt.hi, tt.lo)
+			t.Errorf("bindGraphMetricName(%q, %q): want an error", tt.hi, tt.lo)
 		}
 	}
 }
@@ -39,9 +39,9 @@ func TestGeneralizeMetricName(t *testing.T) {
 		{name: "memory.#", want: "memory.#"},
 	}
 	for _, tt := range tests {
-		s := GeneralizeMetricName(tt.name)
+		s := generalizeMetricName(tt.name)
 		if s != tt.want {
-			t.Errorf("GeneralizeMetricName(%q) = %q; want %q", tt.name, s, tt.want)
+			t.Errorf("generalizeMetricName(%q) = %q; want %q", tt.name, s, tt.want)
 		}
 	}
 }

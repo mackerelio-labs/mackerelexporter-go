@@ -79,9 +79,9 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 }
 
 type registration struct {
-	res   *Resource
-	def   *mackerel.GraphDefsParam
-	value *mackerel.MetricValue
+	res      *Resource
+	graphDef *mackerel.GraphDefsParam
+	value    *mackerel.MetricValue
 }
 
 func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
@@ -107,11 +107,11 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 			e.hosts[id] = h
 		}
 
-		name := reg.def.Metrics[0].Name
+		name := reg.graphDef.Metrics[0].Name
 		if g, ok := graphDefs[name]; ok {
-			g.Metrics = append(g.Metrics, reg.def.Metrics[0])
+			g.Metrics = append(g.Metrics, reg.graphDef.Metrics[0])
 		} else {
-			graphDefs[name] = reg.def
+			graphDefs[name] = reg.graphDef
 		}
 
 		hostID := e.hosts[id]
@@ -152,7 +152,6 @@ func (e *Exporter) mergeGraphDefs(defs map[string]*mackerel.GraphDefsParam) {
 
 func (e *Exporter) convertToRegistration(r export.Record) (*registration, error) {
 	desc := r.Descriptor()
-	aggr := r.Aggregator()
 	kind := desc.NumberKind()
 
 	var res Resource
@@ -162,34 +161,20 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	}
 
 	name := NormalizeMetricName(desc.Name())
-	gclass := NormalizeMetricName(res.Mackerel.Graph.Class)
-	mclass := NormalizeMetricName(res.Mackerel.Metric.Class)
-	switch {
-	case mclass == "" && gclass == "":
-		mclass = GeneralizeMetricName(name)
-		gclass = mclass
-	case mclass == "":
-		s, err := AppendMetricName(gclass, mclass)
-		if err != nil {
-			return nil, err
-		}
-		mclass = s
-	case gclass == "":
-		gclass = mclass
+	opts := GraphDefOptions{
+		Name:       NormalizeMetricName(res.Mackerel.Graph.Class),
+		MetricName: NormalizeMetricName(res.Mackerel.Metric.Class),
+		Unit:       desc.Unit(),
+		Kind:       kind,
 	}
-	if !MetricName(mclass).Match(name) {
-		return nil, errMismatch
-	}
-	def := &mackerel.GraphDefsParam{
-		Name: "custom." + gclass,
-		Unit: GraphUnit(desc.Unit()),
-		Metrics: []*mackerel.GraphDefsMetric{
-			{Name: "custom." + mclass},
-		},
+	d, err := NewGraphDef(name, opts)
+	if err != nil {
+		return nil, err
 	}
 
+	aggr := r.Aggregator()
 	m := metricValue(name, aggr, kind)
-	return &registration{res: &res, def: def, value: m}, nil
+	return &registration{res: &res, graphDef: d, value: m}, nil
 }
 
 func metricValue(name string, aggr export.Aggregator, kind core.NumberKind) *mackerel.MetricValue {

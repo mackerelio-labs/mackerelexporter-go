@@ -4,7 +4,10 @@ import (
 	"errors"
 	"strings"
 
+	"go.opentelemetry.io/otel/api/core"
 	"go.opentelemetry.io/otel/api/unit"
+
+	"github.com/mackerelio/mackerel-client-go"
 )
 
 // OpenTelemetry naming
@@ -17,6 +20,45 @@ const (
 
 	metricNameSep = "."
 )
+
+// GraphDefOptions represents options for customizing Mackerel's Graph Definition.
+type GraphDefOptions struct {
+	Name       string
+	MetricName string
+	Unit       unit.Unit
+	Kind       core.NumberKind
+}
+
+// NewGraphDef returns Mackerel's Graph Definition that has only one metric in Metrics field.
+// Each names in arguments must be normalized.
+func NewGraphDef(name string, opts GraphDefOptions) (*mackerel.GraphDefsParam, error) {
+	if opts.Unit == "" {
+		opts.Unit = UnitDimensionless
+	}
+	switch {
+	case opts.MetricName == "" && opts.Name == "":
+		opts.MetricName = generalizeMetricName(name)
+		opts.Name = opts.MetricName
+	case opts.MetricName == "" && opts.Name != "":
+		s, err := bindGraphMetricName(opts.Name, name)
+		if err != nil {
+			return nil, err
+		}
+		opts.MetricName = s
+	case opts.MetricName != "" && opts.Name == "":
+		opts.Name = opts.MetricName
+	}
+	if !MetricName(opts.MetricName).Match(name) {
+		return nil, errMismatch
+	}
+	return &mackerel.GraphDefsParam{
+		Name: "custom." + opts.Name,
+		Unit: GraphUnit(opts.Unit),
+		Metrics: []*mackerel.GraphDefsMetric{
+			{Name: "custom." + opts.MetricName},
+		},
+	}, nil
+}
 
 func GraphUnit(u unit.Unit) string {
 	// TODO(lufia): desc.NumberKind
@@ -34,8 +76,8 @@ func GraphUnit(u unit.Unit) string {
 
 var errMismatch = errors.New("mismatched metric names")
 
-// AppendMetricNames returns s1 + rest of s2.
-func AppendMetricName(s1, s2 string) (string, error) {
+// bindGraphMetricName returns s1 + rest of s2.
+func bindGraphMetricName(s1, s2 string) (string, error) {
 	a1 := strings.Split(s1, metricNameSep)
 	a2 := strings.Split(s2, metricNameSep)
 	if len(a1) > len(a2) {
@@ -49,8 +91,8 @@ func AppendMetricName(s1, s2 string) (string, error) {
 	return strings.Join(a2, metricNameSep), nil
 }
 
-// GeneralizeMetricName generalize "a.b" to "a.*" if s don't contain wildcards.
-func GeneralizeMetricName(s string) string {
+// generalizeMetricName generalize "a.b" to "a.*" if s don't contain wildcards.
+func generalizeMetricName(s string) string {
 	if s == "" {
 		return ""
 	}
@@ -67,6 +109,7 @@ func GeneralizeMetricName(s string) string {
 	return strings.Join(a, metricNameSep)
 }
 
+// NormalizeMetricName returns normalized s.
 func NormalizeMetricName(s string) string {
 	normalize := func(c rune) rune {
 		switch {
