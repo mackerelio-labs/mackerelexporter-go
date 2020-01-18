@@ -98,7 +98,7 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	var metrics []*mackerel.HostMetricValue
 	graphDefs := make(map[string]*mackerel.GraphDefsParam)
 	for _, reg := range regs {
-		id := customIdentifier(reg.res)
+		id := reg.res.CustomIdentifier()
 		if _, ok := e.hosts[id]; !ok {
 			h, err := e.UpsertHost(reg.res)
 			if err != nil {

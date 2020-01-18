@@ -11,6 +11,10 @@ import (
 	"go.opentelemetry.io/otel/api/core"
 )
 
+const (
+	resourceNameSep = "."
+)
+
 var (
 	// see https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/data-resource-semantic-conventions.md
 	keyServiceNS         = core.Key("service.namespace")
@@ -26,6 +30,7 @@ var (
 	keyMetricClass = core.Key("mackerel.metric.class")
 )
 
+// Resource represents a resource constructed with labels.
 type Resource struct {
 	Service  ServiceResource  `resource:"service"`
 	Host     HostResource     `resource:"host"`
@@ -33,6 +38,7 @@ type Resource struct {
 	Mackerel MackerelResource `resource:"mackerel"`
 }
 
+// ServiceResource represents the standard service attributes.
 type ServiceResource struct {
 	Name     string           `resource:"name"`
 	NS       string           `resource:"namespace"`
@@ -40,15 +46,18 @@ type ServiceResource struct {
 	Version  string           `resource:"version"`
 }
 
+// InstanceResource represents the standard instance attributes.
 type InstanceResource struct {
 	ID string `resource:"id"`
 }
 
+// HostResource represents the standard host attributes.
 type HostResource struct {
 	ID   string `resource:"id"`
 	Name string `resource:"name"`
 }
 
+// CloudResource represents the standard cloud attributes.
 type CloudResource struct {
 	Provider string `resource:"provider"`
 }
@@ -63,16 +72,54 @@ type MackerelResource struct {
 	} `resource:"graph"`
 }
 
-// UnmarshalLabels marshals ...
-func UnmarshalLabels(meta []core.KeyValue, data interface{}) error {
-	v := reflect.ValueOf(data)
-	for _, kv := range meta {
+// Hostname returns a proper hostname.
+func (r *Resource) Hostname() string {
+	if r.Host.Name != "" {
+		return r.Host.Name
+	}
+	if r.Service.Instance.ID != "" {
+		prefix := ""
+		if r.Service.Name != "" {
+			prefix = r.Service.Name + "-"
+		}
+		return prefix + r.Service.Instance.ID
+	}
+	if s, err := os.Hostname(); err == nil {
+		return s
+	}
+	return ""
+}
+
+// CustomIdentifier returns a proper customIdentifier for the host.
+func (r *Resource) CustomIdentifier() string {
+	if r.Host.ID != "" {
+		return r.Host.ID
+	}
+
+	// TODO(lufia): This may change to equal to mackerel-agent.
+	a := make([]string, 0, 3)
+	if s := r.Service.NS; s != "" {
+		a = append(a, s)
+	}
+	if s := r.Service.Name; s != "" {
+		a = append(a, s)
+	}
+	if s := r.Service.Instance.ID; s != "" {
+		a = append(a, s)
+	}
+	return strings.Join(a, resourceNameSep)
+}
+
+// UnmarshalLabels parses labels and store the result into v.
+func UnmarshalLabels(labels []core.KeyValue, v interface{}) error {
+	p := reflect.ValueOf(v)
+	for _, kv := range labels {
 		if !kv.Key.Defined() {
 			continue
 		}
 		name := string(kv.Key)
-		keys := strings.Split(name, ".")
-		if err := unmarshalLabels("<data>", keys, kv.Value, v); err != nil {
+		keys := strings.Split(name, resourceNameSep)
+		if err := unmarshalLabels("<v>", keys, kv.Value, p); err != nil {
 			return fmt.Errorf("cannot assign %s: %w", name, err)
 		}
 	}
@@ -179,17 +226,17 @@ func collectFields(v reflect.Value) map[string]reflect.Value {
 	return a
 }
 
-// UpsertHost update or insert the host with res.
-func (e *Exporter) UpsertHost(res *Resource) (string, error) {
+// UpsertHost update or insert the host with r.
+func (e *Exporter) UpsertHost(r *Resource) (string, error) {
 	// TODO(lufia): We would require to redesign whether using mackerel-client-go or not.
 	param := mackerel.CreateHostParam{
-		Name:             hostname(res),
-		CustomIdentifier: customIdentifier(res),
+		Name:             r.Hostname(),
+		CustomIdentifier: r.CustomIdentifier(),
 	}
-	if res.Cloud.Provider != "" {
+	if r.Cloud.Provider != "" {
 		param.Meta = mackerel.HostMeta{
 			Cloud: &mackerel.Cloud{
-				Provider: res.Cloud.Provider,
+				Provider: r.Cloud.Provider,
 			},
 		}
 	}
@@ -202,39 +249,6 @@ func (e *Exporter) UpsertHost(res *Resource) (string, error) {
 		return e.c.CreateHost(&param)
 	}
 	return e.c.UpdateHost(hostID, (*mackerel.UpdateHostParam)(&param))
-}
-
-func hostname(res *Resource) string {
-	if res.Host.Name != "" {
-		return res.Host.Name
-	}
-	if res.Service.Instance.ID != "" {
-		// TODO(lufia): service.name
-		return res.Service.Instance.ID
-	}
-	if s, err := os.Hostname(); err == nil {
-		return s
-	}
-	return ""
-}
-
-func customIdentifier(res *Resource) string {
-	if res.Host.ID != "" {
-		return res.Host.ID
-	}
-
-	// TODO(lufia): This may change to equal to mackerel-agent.
-	a := make([]string, 0, 3)
-	if s := res.Service.NS; s != "" {
-		a = append(a, s)
-	}
-	if s := res.Service.Name; s != "" {
-		a = append(a, s)
-	}
-	if s := res.Service.Instance.ID; s != "" {
-		a = append(a, s)
-	}
-	return strings.Join(a, ".")
 }
 
 func (e *Exporter) lookupHostID(customIdentifier string) (string, error) {
