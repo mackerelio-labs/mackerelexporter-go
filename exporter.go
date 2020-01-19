@@ -75,7 +75,7 @@ type Exporter struct {
 
 var _ export.Exporter = &Exporter{}
 
-var defaultQuantiles = []float64{0.99, 0.90, 0.75, 0.50, 0.25, 0.10}
+var defaultQuantiles = []float64{0.99, 0.90}
 
 // NewExporter creates a new Exporter.
 func NewExporter(opts ...Option) (*Exporter, error) {
