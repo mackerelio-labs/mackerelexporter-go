@@ -44,7 +44,8 @@ func NewExportPipeline(opts ...Option) (*push.Controller, error) {
 type Option func(*options)
 
 type options struct {
-	APIKey string
+	APIKey    string
+	Quantiles []float64
 }
 
 // WithAPIKey sets the Mackerel API Key.
@@ -54,17 +55,27 @@ func WithAPIKey(apiKey string) func(o *options) {
 	}
 }
 
+// WithQuantiles sets quantiles for recording measure metrics.
+// Each quantiles must be unique and its precision must be greater or equal than 0.01.
+func WithQuantiles(quantiles []float64) func(o *options) {
+	return func(o *options) {
+		o.Quantiles = quantiles
+	}
+}
+
 // Exporter is a stats exporter that uploads data to Mackerel.
 type Exporter struct {
-	c *mackerel.Client
+	c    *mackerel.Client
+	opts *options
 
-	hosts     map[string]string // value is Mackerel's host ID
-	graphDefs map[string]*mackerel.GraphDefsParam
+	hosts           map[string]string // value is Mackerel's host ID
+	graphDefs       map[string]*mackerel.GraphDefsParam
+	graphMetricDefs map[string]struct{}
 }
 
 var _ export.Exporter = &Exporter{}
 
-const defaultQuantile = 0.9
+var defaultQuantiles = []float64{0.99, 0.90}
 
 // NewExporter creates a new Exporter.
 func NewExporter(opts ...Option) (*Exporter, error) {
@@ -72,16 +83,23 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 	for _, opt := range opts {
 		opt(&o)
 	}
+	if o.Quantiles == nil {
+		o.Quantiles = defaultQuantiles
+	}
 	c := mackerel.NewClient(o.APIKey)
 	return &Exporter{
-		c: c,
+		c:               c,
+		opts:            &o,
+		hosts:           make(map[string]string),
+		graphDefs:       make(map[string]*mackerel.GraphDefsParam),
+		graphMetricDefs: make(map[string]struct{}),
 	}, nil
 }
 
 type registration struct {
 	res      *Resource
 	graphDef *mackerel.GraphDefsParam
-	value    *mackerel.MetricValue
+	metrics  []*mackerel.MetricValue
 }
 
 func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
@@ -98,31 +116,35 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	var metrics []*mackerel.HostMetricValue
 	graphDefs := make(map[string]*mackerel.GraphDefsParam)
 	for _, reg := range regs {
+		// TODO(lufia): post service metrics if host.id is not set and service.name is set.
 		id := reg.res.CustomIdentifier()
 		if _, ok := e.hosts[id]; !ok {
 			h, err := e.UpsertHost(reg.res)
 			if err != nil {
 				return err
 			}
-			if e.hosts == nil {
-				e.hosts = make(map[string]string)
-			}
 			e.hosts[id] = h
 		}
 
-		name := reg.graphDef.Metrics[0].Name
-		if g, ok := graphDefs[name]; ok {
-			g.Metrics = append(g.Metrics, reg.graphDef.Metrics[0])
-		} else {
-			graphDefs[name] = reg.graphDef
+		for _, m := range reg.graphDef.Metrics {
+			if _, ok := e.graphMetricDefs[m.Name]; ok {
+				// A graph is already registered; not need registration.
+				continue
+			}
+			if g, ok := graphDefs[reg.graphDef.Name]; ok {
+				g.Metrics = append(g.Metrics, m)
+			} else {
+				graphDefs[reg.graphDef.Name] = reg.graphDef
+			}
 		}
 
 		hostID := e.hosts[id]
-		metrics = append(metrics, &mackerel.HostMetricValue{
-			HostID:      hostID,
-			MetricValue: reg.value,
-		})
-		// TODO(lufia): post service metrics if host.id is not set and service.name is set.
+		for _, m := range reg.metrics {
+			metrics = append(metrics, &mackerel.HostMetricValue{
+				HostID:      hostID,
+				MetricValue: m,
+			})
+		}
 	}
 
 	var defs []*mackerel.GraphDefsParam
@@ -141,15 +163,15 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 }
 
 func (e *Exporter) mergeGraphDefs(defs map[string]*mackerel.GraphDefsParam) {
-	if e.graphDefs == nil {
-		e.graphDefs = make(map[string]*mackerel.GraphDefsParam)
-	}
 	for k, v := range defs {
 		if p, ok := e.graphDefs[k]; ok {
 			p.Metrics = append(p.Metrics, v.Metrics...)
-			continue
+		} else {
+			e.graphDefs[k] = v
 		}
-		e.graphDefs[k] = v
+		for _, m := range v.Metrics {
+			e.graphMetricDefs[m.Name] = struct{}{}
+		}
 	}
 }
 
@@ -169,48 +191,55 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 		MetricName: SanitizeMetricName(res.Mackerel.Metric.Class),
 		Unit:       desc.Unit(),
 		Kind:       kind,
+		Quantiles:  e.opts.Quantiles,
 	}
-	d, err := NewGraphDef(name, opts)
+	g, err := NewGraphDef(name, desc.MetricKind(), opts)
 	if err != nil {
 		return nil, err
 	}
 
 	aggr := r.Aggregator()
-	m := metricValue(name, aggr, kind)
-	return &registration{res: &res, graphDef: d, value: m}, nil
+	a := e.metricValues(name, aggr, kind)
+	return &registration{res: &res, graphDef: g, metrics: a}, nil
 }
 
-func metricValue(name string, aggr export.Aggregator, kind core.NumberKind) *mackerel.MetricValue {
-	var v interface{}
+func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.NumberKind) []*mackerel.MetricValue {
+	var a []*mackerel.MetricValue
 
 	// see https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/selector/simple/simple.go
 	if p, ok := aggr.(aggregator.Distribution); ok {
 		// export.MeasureKind: MinMaxSumCount, Distribution, Points
-		q, err := p.Quantile(defaultQuantile)
-		if err != nil {
-			return nil
+		if min, err := p.Min(); err == nil {
+			a = append(a, metricValue(JoinMetricName(name, "min"), min.AsInterface(kind)))
 		}
-		v = q.AsInterface(kind)
+		if max, err := p.Max(); err == nil {
+			a = append(a, metricValue(JoinMetricName(name, "max"), max.AsInterface(kind)))
+		}
+		for _, quantile := range e.opts.Quantiles {
+			q, err := p.Quantile(quantile)
+			if err == nil {
+				return nil
+			}
+			qname := PercentileName(quantile)
+			a = append(a, metricValue(JoinMetricName(name, qname), q.AsInterface(kind)))
+		}
 	} else if p, ok := aggr.(aggregator.LastValue); ok {
 		// export.GaugeKind: LastValue
-		last, _, err := p.LastValue()
-		if err != nil {
-			return nil
+		if last, _, err := p.LastValue(); err == nil {
+			a = append(a, metricValue(name, last.AsInterface(kind)))
 		}
-		v = last.AsInterface(kind)
 	} else if p, ok := aggr.(aggregator.Sum); ok {
 		// export.CounterKind: Sum
-		sum, err := p.Sum()
-		if err != nil {
-			return nil
+		if sum, err := p.Sum(); err == nil {
+			a = append(a, metricValue(name, sum.AsInterface(kind)))
 		}
-		v = sum.AsInterface(kind)
-	} else {
-		return nil
 	}
+	return a
+}
 
+func metricValue(name string, v ...interface{}) *mackerel.MetricValue {
 	return &mackerel.MetricValue{
-		Name:  name,
+		Name:  JoinMetricName("custom", name),
 		Time:  time.Now().Unix(),
 		Value: v,
 	}

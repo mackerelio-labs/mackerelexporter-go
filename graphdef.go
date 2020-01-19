@@ -2,10 +2,13 @@ package mackerel
 
 import (
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 
 	"go.opentelemetry.io/otel/api/core"
 	"go.opentelemetry.io/otel/api/unit"
+	export "go.opentelemetry.io/otel/sdk/export/metric"
 
 	"github.com/mackerelio/mackerel-client-go"
 )
@@ -21,17 +24,26 @@ const (
 	metricNameSep = "."
 )
 
+// JoinMetricName joins any number of name elements int a single name.
+func JoinMetricName(elem ...string) string {
+	a := make([]string, len(elem))
+	for i, s := range elem {
+		a[i] = s
+	}
+	return strings.Join(a, metricNameSep)
+}
+
 // GraphDefOptions represents options for customizing Mackerel's Graph Definition.
 type GraphDefOptions struct {
 	Name       string
 	MetricName string
 	Unit       unit.Unit
 	Kind       core.NumberKind
+	Quantiles  []float64
 }
 
-// NewGraphDef returns Mackerel's Graph Definition.
-// Each names in arguments must be sanitized.
-func NewGraphDef(name string, opts GraphDefOptions) (*mackerel.GraphDefsParam, error) {
+// NewGraphDef returns Mackerel's Graph Definition. Each names in arguments must be sanitized.
+func NewGraphDef(name string, kind export.MetricKind, opts GraphDefOptions) (*mackerel.GraphDefsParam, error) {
 	if opts.Unit == "" {
 		opts.Unit = UnitDimensionless
 	}
@@ -51,13 +63,37 @@ func NewGraphDef(name string, opts GraphDefOptions) (*mackerel.GraphDefsParam, e
 	if !MetricName(opts.MetricName).Match(name) {
 		return nil, errMismatch
 	}
-	return &mackerel.GraphDefsParam{
-		Name: "custom." + opts.Name,
+	g := &mackerel.GraphDefsParam{
+		Name: JoinMetricName("custom", opts.Name),
 		Unit: graphUnit(opts.Unit, opts.Kind),
-		Metrics: []*mackerel.GraphDefsMetric{
-			{Name: "custom." + opts.MetricName},
-		},
-	}, nil
+	}
+	if kind == export.MeasureKind {
+		g.Metrics = measureMetrics(opts.MetricName, opts.Quantiles)
+	} else {
+		g.Metrics = []*mackerel.GraphDefsMetric{
+			{Name: JoinMetricName("custom", opts.MetricName)},
+		}
+	}
+	return g, nil
+}
+
+// PercentileName returns "percentile_xx".
+func PercentileName(q float64) string {
+	return fmt.Sprintf("percentile_%.0f", math.Floor(q*100))
+}
+
+func measureMetrics(name string, quantiles []float64) []*mackerel.GraphDefsMetric {
+	suffixes := []string{"min", "max"}
+	for _, q := range quantiles {
+		suffixes = append(suffixes, PercentileName(q))
+	}
+	var a []*mackerel.GraphDefsMetric
+	for _, s := range suffixes {
+		a = append(a, &mackerel.GraphDefsMetric{
+			Name: JoinMetricName("custom", name, s),
+		})
+	}
+	return a
 }
 
 func graphUnit(u unit.Unit, kind core.NumberKind) string {
