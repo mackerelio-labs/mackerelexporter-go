@@ -2,6 +2,7 @@ package mackerel
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/api/core"
@@ -126,15 +127,17 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 			e.hosts[id] = h
 		}
 
-		for _, m := range reg.graphDef.Metrics {
-			if _, ok := e.graphMetricDefs[m.Name]; ok {
-				// A graph is already registered; not need registration.
-				continue
-			}
-			if g, ok := graphDefs[reg.graphDef.Name]; ok {
-				g.Metrics = append(g.Metrics, m)
-			} else {
-				graphDefs[reg.graphDef.Name] = reg.graphDef
+		if reg.graphDef != nil {
+			for _, m := range reg.graphDef.Metrics {
+				if _, ok := e.graphMetricDefs[m.Name]; ok {
+					// A graph is already registered; not need registration.
+					continue
+				}
+				if g, ok := graphDefs[reg.graphDef.Name]; ok {
+					g.Metrics = append(g.Metrics, m)
+				} else {
+					graphDefs[reg.graphDef.Name] = reg.graphDef
+				}
 			}
 		}
 
@@ -176,6 +179,7 @@ func (e *Exporter) mergeGraphDefs(defs map[string]*mackerel.GraphDefsParam) {
 }
 
 func (e *Exporter) convertToRegistration(r export.Record) (*registration, error) {
+	var reg registration
 	desc := r.Descriptor()
 	kind := desc.NumberKind()
 
@@ -184,11 +188,18 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	if err := UnmarshalLabels(labels, &res); err != nil {
 		return nil, err
 	}
+	reg.res = &res
 
-	name := SanitizeMetricName(desc.Name())
+	name := CanonicalMetricName(desc.Name())
+	aggr := r.Aggregator()
+	reg.metrics = e.metricValues(name, aggr, kind)
+
+	if !strings.HasPrefix(name, "custom.") {
+		return &reg, nil
+	}
 	opts := GraphDefOptions{
-		Name:       SanitizeMetricName(res.Mackerel.Graph.Class),
-		MetricName: SanitizeMetricName(res.Mackerel.Metric.Class),
+		Name:       CanonicalMetricName(res.Mackerel.Graph.Class),
+		MetricName: CanonicalMetricName(res.Mackerel.Metric.Class),
 		Unit:       desc.Unit(),
 		Kind:       kind,
 		Quantiles:  e.opts.Quantiles,
@@ -197,10 +208,9 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	if err != nil {
 		return nil, err
 	}
+	reg.graphDef = g
 
-	aggr := r.Aggregator()
-	a := e.metricValues(name, aggr, kind)
-	return &registration{res: &res, graphDef: g, metrics: a}, nil
+	return &reg, nil
 }
 
 func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.NumberKind) []*mackerel.MetricValue {
@@ -239,7 +249,7 @@ func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.N
 
 func metricValue(name string, v ...interface{}) *mackerel.MetricValue {
 	return &mackerel.MetricValue{
-		Name:  JoinMetricName("custom", name),
+		Name:  name,
 		Time:  time.Now().Unix(),
 		Value: v,
 	}

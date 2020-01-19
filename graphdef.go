@@ -42,7 +42,7 @@ type GraphDefOptions struct {
 	Quantiles  []float64
 }
 
-// NewGraphDef returns Mackerel's Graph Definition. Each names in arguments must be sanitized.
+// NewGraphDef returns Mackerel's Graph Definition. Each names in arguments must be canonicalized.
 func NewGraphDef(name string, kind export.MetricKind, opts GraphDefOptions) (*mackerel.GraphDefsParam, error) {
 	if opts.Unit == "" {
 		opts.Unit = UnitDimensionless
@@ -64,14 +64,14 @@ func NewGraphDef(name string, kind export.MetricKind, opts GraphDefOptions) (*ma
 		return nil, errMismatch
 	}
 	g := &mackerel.GraphDefsParam{
-		Name: JoinMetricName("custom", opts.Name),
+		Name: opts.Name,
 		Unit: graphUnit(opts.Unit, opts.Kind),
 	}
 	if kind == export.MeasureKind {
 		g.Metrics = measureMetrics(opts.MetricName, opts.Quantiles)
 	} else {
 		g.Metrics = []*mackerel.GraphDefsMetric{
-			{Name: JoinMetricName("custom", opts.MetricName)},
+			{Name: opts.MetricName},
 		}
 	}
 	return g, nil
@@ -90,7 +90,7 @@ func measureMetrics(name string, quantiles []float64) []*mackerel.GraphDefsMetri
 	var a []*mackerel.GraphDefsMetric
 	for _, s := range suffixes {
 		a = append(a, &mackerel.GraphDefsMetric{
-			Name: JoinMetricName("custom", name, s),
+			Name: JoinMetricName(name, s),
 		})
 	}
 	return a
@@ -148,8 +148,16 @@ func generalizeMetricName(s string) string {
 	return strings.Join(a, metricNameSep)
 }
 
-// SanitizeMetricName returns sanitized s.
-func SanitizeMetricName(s string) string {
+// CanonicalMetricName returns canonical metric name.
+func CanonicalMetricName(s string) string {
+	s = sanitizeMetricName(s)
+	if isSystemMetric(s) {
+		return s
+	}
+	return JoinMetricName("custom", s)
+}
+
+func sanitizeMetricName(s string) string {
 	sanitize := func(c rune) rune {
 		switch {
 		case c >= '0' && c <= '9':
@@ -195,8 +203,8 @@ func init() {
 	}
 }
 
-// IsSystemMetric returns whether s is system metric in Mackerel.
-func IsSystemMetric(s string) bool {
+// isSystemMetric returns whether s is system metric in Mackerel.
+func isSystemMetric(s string) bool {
 	for m := range systemMetricNames {
 		if m.Match(s) {
 			return true

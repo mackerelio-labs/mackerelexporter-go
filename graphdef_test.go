@@ -56,9 +56,9 @@ func TestSanitizeMetricName(t *testing.T) {
 		{name: "aaa.$!.bb", want: "aaa.__.bb"},
 	}
 	for _, tt := range tests {
-		s := SanitizeMetricName(tt.name)
+		s := sanitizeMetricName(tt.name)
 		if s != tt.want {
-			t.Errorf("SanitizeMetricName(%q) = %q; want %q", tt.name, s, tt.want)
+			t.Errorf("sanitizeMetricName(%q) = %q; want %q", tt.name, s, tt.want)
 		}
 	}
 }
@@ -76,9 +76,9 @@ func TestIsSystemMetric(t *testing.T) {
 		{name: "filesystem.sdC0.size", want: true},
 	}
 	for _, tt := range tests {
-		v := IsSystemMetric(tt.name)
+		v := isSystemMetric(tt.name)
 		if v != tt.want {
-			t.Errorf("IsSystemMetric(%q) = %t; want %t", tt.name, v, tt.want)
+			t.Errorf("isSystemMetric(%q) = %t; want %t", tt.name, v, tt.want)
 		}
 	}
 }
