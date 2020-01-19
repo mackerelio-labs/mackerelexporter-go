@@ -58,8 +58,9 @@ func WithAPIKey(apiKey string) func(o *options) {
 type Exporter struct {
 	c *mackerel.Client
 
-	hosts     map[string]string // value is Mackerel's host ID
-	graphDefs map[string]*mackerel.GraphDefsParam
+	hosts           map[string]string // value is Mackerel's host ID
+	graphDefs       map[string]*mackerel.GraphDefsParam
+	graphMetricDefs map[string]struct{}
 }
 
 var _ export.Exporter = &Exporter{}
@@ -74,7 +75,10 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 	}
 	c := mackerel.NewClient(o.APIKey)
 	return &Exporter{
-		c: c,
+		c:               c,
+		hosts:           make(map[string]string),
+		graphDefs:       make(map[string]*mackerel.GraphDefsParam),
+		graphMetricDefs: make(map[string]struct{}),
 	}, nil
 }
 
@@ -98,23 +102,26 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	var metrics []*mackerel.HostMetricValue
 	graphDefs := make(map[string]*mackerel.GraphDefsParam)
 	for _, reg := range regs {
+		// TODO(lufia): post service metrics if host.id is not set and service.name is set.
 		id := reg.res.CustomIdentifier()
 		if _, ok := e.hosts[id]; !ok {
 			h, err := e.UpsertHost(reg.res)
 			if err != nil {
 				return err
 			}
-			if e.hosts == nil {
-				e.hosts = make(map[string]string)
-			}
 			e.hosts[id] = h
 		}
 
-		name := reg.graphDef.Metrics[0].Name
-		if g, ok := graphDefs[name]; ok {
-			g.Metrics = append(g.Metrics, reg.graphDef.Metrics[0])
-		} else {
-			graphDefs[name] = reg.graphDef
+		for _, m := range reg.graphDef.Metrics {
+			if _, ok := e.graphMetricDefs[m.Name]; ok {
+				// A graph is already registered; not need registration.
+				continue
+			}
+			if g, ok := graphDefs[reg.graphDef.Name]; ok {
+				g.Metrics = append(g.Metrics, m)
+			} else {
+				graphDefs[reg.graphDef.Name] = reg.graphDef
+			}
 		}
 
 		hostID := e.hosts[id]
@@ -122,7 +129,6 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 			HostID:      hostID,
 			MetricValue: reg.value,
 		})
-		// TODO(lufia): post service metrics if host.id is not set and service.name is set.
 	}
 
 	var defs []*mackerel.GraphDefsParam
@@ -141,15 +147,15 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 }
 
 func (e *Exporter) mergeGraphDefs(defs map[string]*mackerel.GraphDefsParam) {
-	if e.graphDefs == nil {
-		e.graphDefs = make(map[string]*mackerel.GraphDefsParam)
-	}
 	for k, v := range defs {
 		if p, ok := e.graphDefs[k]; ok {
 			p.Metrics = append(p.Metrics, v.Metrics...)
-			continue
+		} else {
+			e.graphDefs[k] = v
 		}
-		e.graphDefs[k] = v
+		for _, m := range v.Metrics {
+			e.graphMetricDefs[m.Name] = struct{}{}
+		}
 	}
 }
 
@@ -170,14 +176,14 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 		Unit:       desc.Unit(),
 		Kind:       kind,
 	}
-	d, err := NewGraphDef(name, opts)
+	g, err := NewGraphDef(name, desc.MetricKind(), opts)
 	if err != nil {
 		return nil, err
 	}
 
 	aggr := r.Aggregator()
 	m := metricValue(name, aggr, kind)
-	return &registration{res: &res, graphDef: d, value: m}, nil
+	return &registration{res: &res, graphDef: g, value: m}, nil
 }
 
 func metricValue(name string, aggr export.Aggregator, kind core.NumberKind) *mackerel.MetricValue {

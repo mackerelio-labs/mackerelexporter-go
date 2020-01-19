@@ -6,6 +6,7 @@ import (
 
 	"go.opentelemetry.io/otel/api/core"
 	"go.opentelemetry.io/otel/api/unit"
+	export "go.opentelemetry.io/otel/sdk/export/metric"
 
 	"github.com/mackerelio/mackerel-client-go"
 )
@@ -21,6 +22,15 @@ const (
 	metricNameSep = "."
 )
 
+// JoinMetricName joins any number of name elements int a single name.
+func JoinMetricName(elem ...string) string {
+	a := make([]string, len(elem))
+	for i, s := range elem {
+		a[i] = s
+	}
+	return strings.Join(a, metricNameSep)
+}
+
 // GraphDefOptions represents options for customizing Mackerel's Graph Definition.
 type GraphDefOptions struct {
 	Name       string
@@ -29,9 +39,8 @@ type GraphDefOptions struct {
 	Kind       core.NumberKind
 }
 
-// NewGraphDef returns Mackerel's Graph Definition.
-// Each names in arguments must be sanitized.
-func NewGraphDef(name string, opts GraphDefOptions) (*mackerel.GraphDefsParam, error) {
+// NewGraphDef returns Mackerel's Graph Definition. Each names in arguments must be sanitized.
+func NewGraphDef(name string, kind export.MetricKind, opts GraphDefOptions) (*mackerel.GraphDefsParam, error) {
 	if opts.Unit == "" {
 		opts.Unit = UnitDimensionless
 	}
@@ -51,13 +60,14 @@ func NewGraphDef(name string, opts GraphDefOptions) (*mackerel.GraphDefsParam, e
 	if !MetricName(opts.MetricName).Match(name) {
 		return nil, errMismatch
 	}
-	return &mackerel.GraphDefsParam{
-		Name: "custom." + opts.Name,
+	g := &mackerel.GraphDefsParam{
+		Name: JoinMetricName("custom", opts.Name),
 		Unit: graphUnit(opts.Unit, opts.Kind),
-		Metrics: []*mackerel.GraphDefsMetric{
-			{Name: "custom." + opts.MetricName},
-		},
-	}, nil
+	}
+	g.Metrics = []*mackerel.GraphDefsMetric{
+		{Name: JoinMetricName("custom", opts.MetricName)},
+	}
+	return g, nil
 }
 
 func graphUnit(u unit.Unit, kind core.NumberKind) string {
