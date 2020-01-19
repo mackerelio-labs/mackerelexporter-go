@@ -44,7 +44,8 @@ func NewExportPipeline(opts ...Option) (*push.Controller, error) {
 type Option func(*options)
 
 type options struct {
-	APIKey string
+	APIKey    string
+	Quantiles []float64
 }
 
 // WithAPIKey sets the Mackerel API Key.
@@ -54,9 +55,18 @@ func WithAPIKey(apiKey string) func(o *options) {
 	}
 }
 
+// WithQuantiles sets quantiles for recording measure metrics.
+// Each quantiles must be unique and its precision must be greater or equal than 0.01.
+func WithQuantiles(quantiles []float64) func(o *options) {
+	return func(o *options) {
+		o.Quantiles = quantiles
+	}
+}
+
 // Exporter is a stats exporter that uploads data to Mackerel.
 type Exporter struct {
-	c *mackerel.Client
+	c    *mackerel.Client
+	opts *options
 
 	hosts           map[string]string // value is Mackerel's host ID
 	graphDefs       map[string]*mackerel.GraphDefsParam
@@ -65,7 +75,7 @@ type Exporter struct {
 
 var _ export.Exporter = &Exporter{}
 
-const defaultQuantile = 0.9
+var defaultQuantiles = []float64{0.99, 0.90, 0.75, 0.50, 0.25, 0.10}
 
 // NewExporter creates a new Exporter.
 func NewExporter(opts ...Option) (*Exporter, error) {
@@ -73,9 +83,13 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 	for _, opt := range opts {
 		opt(&o)
 	}
+	if o.Quantiles == nil {
+		o.Quantiles = defaultQuantiles
+	}
 	c := mackerel.NewClient(o.APIKey)
 	return &Exporter{
 		c:               c,
+		opts:            &o,
 		hosts:           make(map[string]string),
 		graphDefs:       make(map[string]*mackerel.GraphDefsParam),
 		graphMetricDefs: make(map[string]struct{}),
@@ -175,6 +189,7 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 		MetricName: SanitizeMetricName(res.Mackerel.Metric.Class),
 		Unit:       desc.Unit(),
 		Kind:       kind,
+		Quantiles:  e.opts.Quantiles,
 	}
 	g, err := NewGraphDef(name, desc.MetricKind(), opts)
 	if err != nil {

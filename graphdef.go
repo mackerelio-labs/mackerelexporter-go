@@ -37,6 +37,7 @@ type GraphDefOptions struct {
 	MetricName string
 	Unit       unit.Unit
 	Kind       core.NumberKind
+	Quantiles  []float64
 }
 
 // NewGraphDef returns Mackerel's Graph Definition. Each names in arguments must be sanitized.
