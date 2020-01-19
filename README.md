@@ -2,6 +2,16 @@
 
 This is the OpenTelemetry Exporter for Mackerel.
 
+[![GoDoc][godoc-image]][godoc-url]
+
+## Hosts
+TODO
+
+## Graph Definitions
+TODO
+
+## Example
+
 ```go
 import (
 	"context"
@@ -49,3 +59,6 @@ func main() {
 	time.Sleep(2 * time.Minute)
 }
 ```
+
+[godoc-image]: https://godoc.org/github.com/lufia/mackerelexporter-go?status.svg
+[godoc-url]: https://godoc.org/github.com/lufia/mackerelexporter-go
