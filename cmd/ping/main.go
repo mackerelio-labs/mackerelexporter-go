@@ -20,7 +20,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer pusher.Close()
+	defer pusher.Stop()
 
 	meter := global.MeterProvider().Meter("example/ping")
 	key := key.New("host.id")
