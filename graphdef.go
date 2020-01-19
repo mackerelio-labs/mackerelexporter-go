@@ -161,7 +161,6 @@ func init() {
 
 // IsSystemMetric returns whether s is system metric in Mackerel.
 func IsSystemMetric(s string) bool {
-	s = NormalizeMetricName(s)
 	for m := range systemMetricNames {
 		if m.Match(s) {
 			return true
