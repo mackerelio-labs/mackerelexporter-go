@@ -2,6 +2,8 @@ package mackerel
 
 import (
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 
 	"go.opentelemetry.io/otel/api/core"
@@ -65,10 +67,33 @@ func NewGraphDef(name string, kind export.MetricKind, opts GraphDefOptions) (*ma
 		Name: JoinMetricName("custom", opts.Name),
 		Unit: graphUnit(opts.Unit, opts.Kind),
 	}
-	g.Metrics = []*mackerel.GraphDefsMetric{
-		{Name: JoinMetricName("custom", opts.MetricName)},
+	if kind == export.MeasureKind {
+		g.Metrics = measureMetrics(opts.MetricName, opts.Quantiles)
+	} else {
+		g.Metrics = []*mackerel.GraphDefsMetric{
+			{Name: JoinMetricName("custom", opts.MetricName)},
+		}
 	}
 	return g, nil
+}
+
+// PercentileName returns "percentile_xx".
+func PercentileName(q float64) string {
+	return fmt.Sprintf("percentile_%.0f", math.Floor(q*100))
+}
+
+func measureMetrics(name string, quantiles []float64) []*mackerel.GraphDefsMetric {
+	suffixes := []string{"min", "max"}
+	for _, q := range quantiles {
+		suffixes = append(suffixes, PercentileName(q))
+	}
+	var a []*mackerel.GraphDefsMetric
+	for _, s := range suffixes {
+		a = append(a, &mackerel.GraphDefsMetric{
+			Name: JoinMetricName("custom", name, s),
+		})
+	}
+	return a
 }
 
 func graphUnit(u unit.Unit, kind core.NumberKind) string {

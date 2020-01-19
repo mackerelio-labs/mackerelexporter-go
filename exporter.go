@@ -99,7 +99,7 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 type registration struct {
 	res      *Resource
 	graphDef *mackerel.GraphDefsParam
-	value    *mackerel.MetricValue
+	metrics  []*mackerel.MetricValue
 }
 
 func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
@@ -139,10 +139,12 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 		}
 
 		hostID := e.hosts[id]
-		metrics = append(metrics, &mackerel.HostMetricValue{
-			HostID:      hostID,
-			MetricValue: reg.value,
-		})
+		for _, m := range reg.metrics {
+			metrics = append(metrics, &mackerel.HostMetricValue{
+				HostID:      hostID,
+				MetricValue: m,
+			})
+		}
 	}
 
 	var defs []*mackerel.GraphDefsParam
@@ -197,41 +199,47 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	}
 
 	aggr := r.Aggregator()
-	m := metricValue(name, aggr, kind)
-	return &registration{res: &res, graphDef: g, value: m}, nil
+	a := e.metricValues(name, aggr, kind)
+	return &registration{res: &res, graphDef: g, metrics: a}, nil
 }
 
-func metricValue(name string, aggr export.Aggregator, kind core.NumberKind) *mackerel.MetricValue {
-	var v interface{}
+func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.NumberKind) []*mackerel.MetricValue {
+	var a []*mackerel.MetricValue
 
 	// see https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/selector/simple/simple.go
 	if p, ok := aggr.(aggregator.Distribution); ok {
 		// export.MeasureKind: MinMaxSumCount, Distribution, Points
-		q, err := p.Quantile(defaultQuantile)
-		if err != nil {
-			return nil
+		if min, err := p.Min(); err == nil {
+			a = append(a, metricValue(JoinMetricName(name, "min"), min.AsInterface(kind)))
 		}
-		v = q.AsInterface(kind)
+		if max, err := p.Max(); err == nil {
+			a = append(a, metricValue(JoinMetricName(name, "max"), max.AsInterface(kind)))
+		}
+		for _, quantile := range e.opts.Quantiles {
+			q, err := p.Quantile(quantile)
+			if err == nil {
+				return nil
+			}
+			qname := PercentileName(quantile)
+			a = append(a, metricValue(JoinMetricName(name, qname), q.AsInterface(kind)))
+		}
 	} else if p, ok := aggr.(aggregator.LastValue); ok {
 		// export.GaugeKind: LastValue
-		last, _, err := p.LastValue()
-		if err != nil {
-			return nil
+		if last, _, err := p.LastValue(); err == nil {
+			a = append(a, metricValue(name, last.AsInterface(kind)))
 		}
-		v = last.AsInterface(kind)
 	} else if p, ok := aggr.(aggregator.Sum); ok {
 		// export.CounterKind: Sum
-		sum, err := p.Sum()
-		if err != nil {
-			return nil
+		if sum, err := p.Sum(); err == nil {
+			a = append(a, metricValue(name, sum.AsInterface(kind)))
 		}
-		v = sum.AsInterface(kind)
-	} else {
-		return nil
 	}
+	return a
+}
 
+func metricValue(name string, v ...interface{}) *mackerel.MetricValue {
 	return &mackerel.MetricValue{
-		Name:  name,
+		Name:  JoinMetricName("custom", name),
 		Time:  time.Now().Unix(),
 		Value: v,
 	}
