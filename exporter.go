@@ -119,6 +119,9 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	for _, reg := range regs {
 		// TODO(lufia): post service metrics if host.id is not set and service.name is set.
 		id := reg.res.CustomIdentifier()
+		if id == "" {
+			continue
+		}
 		if _, ok := e.hosts[id]; !ok {
 			h, err := e.UpsertHost(reg.res)
 			if err != nil {
