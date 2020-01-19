@@ -40,7 +40,7 @@ func NewGraphDef(name string, opts GraphDefOptions) (*mackerel.GraphDefsParam, e
 		opts.MetricName = generalizeMetricName(name)
 		opts.Name = opts.MetricName
 	case opts.MetricName == "" && opts.Name != "":
-		s, err := bindGraphMetricName(opts.Name, name)
+		s, err := replaceMetricNamePrefix(name, opts.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -79,15 +79,15 @@ func graphUnit(u unit.Unit, kind core.NumberKind) string {
 
 var errMismatch = errors.New("mismatched metric names")
 
-// bindGraphMetricName returns s1 + rest of s2.
-func bindGraphMetricName(s1, s2 string) (string, error) {
-	a1 := strings.Split(s1, metricNameSep)
-	a2 := strings.Split(s2, metricNameSep)
+// replaceMetricNamePrefix returns prefix + rest of s.
+func replaceMetricNamePrefix(s, prefix string) (string, error) {
+	a1 := strings.Split(prefix, metricNameSep)
+	a2 := strings.Split(s, metricNameSep)
 	if len(a1) > len(a2) {
 		return "", errMismatch
 	}
 	t := strings.Join(a2[:len(a1)], metricNameSep)
-	if !MetricName(s1).Match(t) {
+	if !MetricName(prefix).Match(t) {
 		return "", errMismatch
 	}
 	copy(a2[:len(a1)], a1)

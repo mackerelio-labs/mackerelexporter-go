@@ -4,25 +4,25 @@ import (
 	"testing"
 )
 
-func TestBindGraphMetricName(t *testing.T) {
+func TestReplaceMetricNamePrefix(t *testing.T) {
 	tests := []struct {
-		hi   string
-		lo   string
-		want string
+		prefix string
+		s      string
+		want   string
 	}{
-		{hi: "a.b", lo: "a.b.c", want: "a.b.c"},
-		{hi: "a.#", lo: "a.#.c", want: "a.#.c"},
-		{hi: "a.#", lo: "a.b.c", want: "a.#.c"},
-		{hi: "a.#", lo: "a.b.*", want: "a.#.*"},
-		{hi: "a.#.*.x", lo: "a.b.c.*", want: ""}, // fail
+		{prefix: "a.b", s: "a.b.c", want: "a.b.c"},
+		{prefix: "a.#", s: "a.#.c", want: "a.#.c"},
+		{prefix: "a.#", s: "a.b.c", want: "a.#.c"},
+		{prefix: "a.#", s: "a.b.*", want: "a.#.*"},
+		{prefix: "a.#.*.x", s: "a.b.c.*", want: ""}, // fail
 	}
 	for _, tt := range tests {
-		s, err := bindGraphMetricName(tt.hi, tt.lo)
+		s, err := replaceMetricNamePrefix(tt.s, tt.prefix)
 		if s != tt.want {
-			t.Errorf("bindGraphMetricName(%q, %q) = %q; want %q", tt.hi, tt.lo, s, tt.want)
+			t.Errorf("replaceMetricNamePrefix(%q, %q) = %q; want %q", tt.s, tt.prefix, s, tt.want)
 		}
 		if tt.want == "" && err == nil {
-			t.Errorf("bindGraphMetricName(%q, %q): want an error", tt.hi, tt.lo)
+			t.Errorf("replaceMetricNamePrefix(%q, %q): want an error", tt.s, tt.prefix)
 		}
 	}
 }
