@@ -29,8 +29,8 @@ type GraphDefOptions struct {
 	Kind       core.NumberKind
 }
 
-// NewGraphDef returns Mackerel's Graph Definition that has only one metric in Metrics field.
-// Each names in arguments must be normalized.
+// NewGraphDef returns Mackerel's Graph Definition.
+// Each names in arguments must be sanitized.
 func NewGraphDef(name string, opts GraphDefOptions) (*mackerel.GraphDefsParam, error) {
 	if opts.Unit == "" {
 		opts.Unit = UnitDimensionless
@@ -112,9 +112,9 @@ func generalizeMetricName(s string) string {
 	return strings.Join(a, metricNameSep)
 }
 
-// NormalizeMetricName returns normalized s.
-func NormalizeMetricName(s string) string {
-	normalize := func(c rune) rune {
+// SanitizeMetricName returns sanitized s.
+func SanitizeMetricName(s string) string {
+	sanitize := func(c rune) rune {
 		switch {
 		case c >= '0' && c <= '9':
 			return c
@@ -128,7 +128,7 @@ func NormalizeMetricName(s string) string {
 			return '_'
 		}
 	}
-	return strings.Map(normalize, s)
+	return strings.Map(sanitize, s)
 }
 
 type MetricName string

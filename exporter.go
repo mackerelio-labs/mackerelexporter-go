@@ -163,10 +163,10 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 		return nil, err
 	}
 
-	name := NormalizeMetricName(desc.Name())
+	name := SanitizeMetricName(desc.Name())
 	opts := GraphDefOptions{
-		Name:       NormalizeMetricName(res.Mackerel.Graph.Class),
-		MetricName: NormalizeMetricName(res.Mackerel.Metric.Class),
+		Name:       SanitizeMetricName(res.Mackerel.Graph.Class),
+		MetricName: SanitizeMetricName(res.Mackerel.Metric.Class),
 		Unit:       desc.Unit(),
 		Kind:       kind,
 	}

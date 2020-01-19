@@ -46,7 +46,7 @@ func TestGeneralizeMetricName(t *testing.T) {
 	}
 }
 
-func TestNormalizeMetricName(t *testing.T) {
+func TestSanitizeMetricName(t *testing.T) {
 	tests := []struct {
 		name string
 		want string
@@ -56,9 +56,9 @@ func TestNormalizeMetricName(t *testing.T) {
 		{name: "aaa.$!.bb", want: "aaa.__.bb"},
 	}
 	for _, tt := range tests {
-		s := NormalizeMetricName(tt.name)
+		s := SanitizeMetricName(tt.name)
 		if s != tt.want {
-			t.Errorf("NormalizeMetricName(%q) = %q; want %q", tt.name, s, tt.want)
+			t.Errorf("SanitizeMetricName(%q) = %q; want %q", tt.name, s, tt.want)
 		}
 	}
 }
