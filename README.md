@@ -3,6 +3,7 @@
 This is the OpenTelemetry Exporter for Mackerel.
 
 [![GoDoc][godoc-image]][godoc-url]
+[![Actions Status][actions-image]][actions-url]
 
 ## Hosts
 TODO
@@ -62,3 +63,5 @@ func main() {
 
 [godoc-image]: https://godoc.org/github.com/lufia/mackerelexporter-go?status.svg
 [godoc-url]: https://godoc.org/github.com/lufia/mackerelexporter-go
+[actions-image]: https://github.com/lufia/mackerelexporter-go/workflows/ci/badge.svg
+[actions-url]: https://github.com/lufia/mackerelexporter-go/actions
