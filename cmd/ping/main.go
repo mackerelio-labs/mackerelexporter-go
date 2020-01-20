@@ -18,17 +18,19 @@ import (
 // https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/example_test.go
 
 var (
-	keyHostID      = key.New("host.id")               // custom identifier
-	keyHostName    = key.New("host.name")             // hostname
-	keyGraphClass  = key.New("mackerel.graph.class")  // graph-def's name
-	keyMetricClass = key.New("mackerel.metric.class") // graph-def's metric name
+	keyHostID   = key.New("host.id")   // custom identifier
+	keyHostName = key.New("host.name") // hostname
 
 	keys = []core.Key{
 		keyHostID,
 		keyHostName,
-		keyGraphClass,
-		keyMetricClass,
 	}
+
+	hints = []string{
+		"handlers.#.latency",
+	}
+
+	quantiles = []float64{0.99, 0.90, 0.85}
 
 	meter   = global.MeterProvider().Meter("example/ping")
 	counter = meter.NewInt64Counter("handlers.requests.count", metric.WithKeys(keys...))
@@ -44,20 +46,14 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	counter.Add(ctx, 1, meter.Labels(
 		keyHostID.String("10-1-2-241"),
 		keyHostName.String("localhost"),
-		keyGraphClass.String("handlers.requests.*"),
-		keyMetricClass.String("handlers.requests.*"),
 	))
 	measure.Record(ctx, time.Since(t0).Seconds(), meter.Labels(
 		keyHostID.String("10-1-2-241"),
 		keyHostName.String("localhost"),
-		keyGraphClass.String("handlers.#"),
-		keyMetricClass.String("handlers.#.latency"),
 	))
 	gauge.Set(ctx, time.Now().Unix(), meter.Labels(
 		keyHostID.String("10-1-2-241"),
 		keyHostName.String("localhost"),
-		keyGraphClass.String("handlers.last_accessed"),
-		keyMetricClass.String("handlers.last_accessed"),
 	))
 }
 
@@ -66,7 +62,8 @@ func main() {
 	apiKey := os.Getenv("MACKEREL_APIKEY")
 	pusher, err := mackerel.InstallNewPipeline(
 		mackerel.WithAPIKey(apiKey),
-		mackerel.WithQuantiles([]float64{0.99, 0.90, 0.85}),
+		mackerel.WithQuantiles(quantiles),
+		mackerel.WithHints(hints),
 	)
 	if err != nil {
 		log.Fatal(err)

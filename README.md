@@ -30,13 +30,18 @@ var (
 	// These keys are mapped to Mackerel's attributes.
 	keyHostID      = key.New("host.id")               // custom identifier
 	keyHostName    = key.New("host.name")             // hostname
-	keyGraphClass  = key.New("mackerel.graph.class")  // graph-def's name
-	keyMetricClass = key.New("mackerel.metric.class") // graph-def's metric name
+
+	hints = []string{
+		"storage.#",
+	}
 )
 
 func main() {
 	apiKey := os.Getenv("MACKEREL_APIKEY")
-	pusher, _ := mackerel.InstallNewPipeline(mackerel.WithAPIKey(apiKey))
+	pusher, _ := mackerel.InstallNewPipeline(
+		mackerel.WithAPIKey(apiKey),
+		mackerel.WithHints(hints),
+	)
 	defer pusher.Stop()
 
 	meter := global.MeterProvider().Meter("example")
@@ -46,8 +51,6 @@ func main() {
 	labels := meter.Labels(
 		keyHostID.String("10-1-2-241"),
 		keyHostName.String("localhost"),
-		keyGraphClass.String("storage.#"),
-		keyMetricClass.String("storage.#.*"),
 	)
 	ctx := context.Background()
 	firestoreRead.Add(ctx, 100, labels)

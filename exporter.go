@@ -48,6 +48,7 @@ type Option func(*options)
 type options struct {
 	APIKey    string
 	Quantiles []float64
+	Hints     []string
 }
 
 // WithAPIKey sets the Mackerel API Key.
@@ -62,6 +63,13 @@ func WithAPIKey(apiKey string) func(o *options) {
 func WithQuantiles(quantiles []float64) func(o *options) {
 	return func(o *options) {
 		o.Quantiles = quantiles
+	}
+}
+
+// WithHints sets hints for decision the name of the Graph Definition.
+func WithHints(hints []string) func(o *options) {
+	return func(o *options) {
+		o.Hints = hints
 	}
 }
 
@@ -198,7 +206,9 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	}
 	reg.res = &res
 
+	// TODO(lufia): Enforce the metric to be the custom metric if hint is exist
 	name := CanonicalMetricName(desc.Name())
+	hint := e.lookupHint(desc.Name())
 	aggr := r.Aggregator()
 	reg.metrics = e.metricValues(name, aggr, kind)
 
@@ -206,11 +216,10 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 		return &reg, nil
 	}
 	opts := GraphDefOptions{
-		Name:       CanonicalMetricName(res.Mackerel.Graph.Class),
-		MetricName: CanonicalMetricName(res.Mackerel.Metric.Class),
-		Unit:       desc.Unit(),
-		Kind:       kind,
-		Quantiles:  e.opts.Quantiles,
+		Name:      hint,
+		Unit:      desc.Unit(),
+		Kind:      kind,
+		Quantiles: e.opts.Quantiles,
 	}
 	g, err := NewGraphDef(name, desc.MetricKind(), opts)
 	if err != nil {
@@ -219,6 +228,15 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	reg.graphDef = g
 
 	return &reg, nil
+}
+
+func (e *Exporter) lookupHint(name string) string {
+	for _, s := range e.opts.Hints {
+		if MetricName(s).Match(name) {
+			return CanonicalMetricName(s)
+		}
+	}
+	return ""
 }
 
 func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.NumberKind) []*mackerel.MetricValue {
