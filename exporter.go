@@ -2,6 +2,7 @@ package mackerel
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -157,13 +158,17 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	for _, d := range graphDefs {
 		defs = append(defs, d)
 	}
-	if err := e.c.CreateGraphDefs(defs); err != nil {
-		return err
+	if len(defs) > 0 {
+		if err := e.c.CreateGraphDefs(defs); err != nil {
+			return fmt.Errorf("can't create graph-defs: %w", err)
+		}
+		e.mergeGraphDefs(graphDefs)
 	}
-	e.mergeGraphDefs(graphDefs)
 
-	if err := e.c.PostHostMetricValues(metrics); err != nil {
-		return err
+	if len(metrics) > 0 {
+		if err := e.c.PostHostMetricValues(metrics); err != nil {
+			return fmt.Errorf("can't post metrics: %w", err)
+		}
 	}
 	return nil
 }
@@ -230,8 +235,8 @@ func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.N
 		}
 		for _, quantile := range e.opts.Quantiles {
 			q, err := p.Quantile(quantile)
-			if err == nil {
-				return nil
+			if err != nil {
+				continue
 			}
 			qname := PercentileName(quantile)
 			a = append(a, metricValue(JoinMetricName(name, qname), q.AsInterface(kind)))
@@ -250,7 +255,7 @@ func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.N
 	return a
 }
 
-func metricValue(name string, v ...interface{}) *mackerel.MetricValue {
+func metricValue(name string, v interface{}) *mackerel.MetricValue {
 	return &mackerel.MetricValue{
 		Name:  name,
 		Time:  time.Now().Unix(),
