@@ -24,18 +24,13 @@ var (
 	keyHostID            = core.Key("host.id")
 	keyHostName          = core.Key("host.name")
 	keyCloudProvider     = core.Key("cloud.provider")
-
-	// for graph-def
-	keyGraphClass  = core.Key("mackerel.graph.class")
-	keyMetricClass = core.Key("mackerel.metric.class")
 )
 
 // Resource represents a resource constructed with labels.
 type Resource struct {
-	Service  ServiceResource  `resource:"service"`
-	Host     HostResource     `resource:"host"`
-	Cloud    CloudResource    `resource:"cloud"`
-	Mackerel MackerelResource `resource:"mackerel"`
+	Service ServiceResource `resource:"service"`
+	Host    HostResource    `resource:"host"`
+	Cloud   CloudResource   `resource:"cloud"`
 }
 
 // ServiceResource represents the standard service attributes.
@@ -60,16 +55,6 @@ type HostResource struct {
 // CloudResource represents the standard cloud attributes.
 type CloudResource struct {
 	Provider string `resource:"provider"`
-}
-
-// MackerelResource represents Mackerel specific resources.
-type MackerelResource struct {
-	Metric struct {
-		Class string `resource:"class"`
-	} `resource:"metric"`
-	Graph struct {
-		Class string `resource:"class"`
-	} `resource:"graph"`
 }
 
 // Hostname returns a proper hostname.

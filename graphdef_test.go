@@ -1,48 +1,75 @@
 package mackerel
 
 import (
+	"reflect"
 	"testing"
+
+	"github.com/mackerelio/mackerel-client-go"
+	"go.opentelemetry.io/otel/api/core"
+	export "go.opentelemetry.io/otel/sdk/export/metric"
 )
 
-func TestReplaceMetricNamePrefix(t *testing.T) {
+func TestNewGraphDef(t *testing.T) {
 	tests := []struct {
-		prefix string
-		s      string
-		want   string
-	}{
-		{prefix: "a.b", s: "a.b.c", want: "a.b.c"},
-		{prefix: "a.#", s: "a.#.c", want: "a.#.c"},
-		{prefix: "a.#", s: "a.b.c", want: "a.#.c"},
-		{prefix: "a.#", s: "a.b.*", want: "a.#.*"},
-		{prefix: "a.#.*.x", s: "a.b.c.*", want: ""}, // fail
-	}
-	for _, tt := range tests {
-		s, err := replaceMetricNamePrefix(tt.s, tt.prefix)
-		if s != tt.want {
-			t.Errorf("replaceMetricNamePrefix(%q, %q) = %q; want %q", tt.s, tt.prefix, s, tt.want)
-		}
-		if tt.want == "" && err == nil {
-			t.Errorf("replaceMetricNamePrefix(%q, %q): want an error", tt.s, tt.prefix)
-		}
-	}
-}
-
-func TestGeneralizeMetricName(t *testing.T) {
-	tests := []struct {
+		desc string
+		kind export.MetricKind
 		name string
-		want string
+		opts GraphDefOptions
+		want *mackerel.GraphDefsParam
 	}{
-		{name: "memory.available", want: "memory.*"},
-		{name: "memory.*", want: "memory.*"},
-		{name: "memory.*.usage", want: "memory.*.usage"},
-		{name: "memory.#.usage", want: "memory.#.*"},
-		{name: "memory.#", want: "memory.#"},
+		{
+			desc: "simple_counter",
+			kind: export.CounterKind,
+			name: "custom.ether0.txBytes",
+			opts: GraphDefOptions{},
+			want: &mackerel.GraphDefsParam{
+				Name: "custom.ether0",
+				Unit: "integer",
+				Metrics: []*mackerel.GraphDefsMetric{
+					{Name: "custom.ether0.*"},
+				},
+			},
+		},
+		{
+			desc: "counter_with_options",
+			kind: export.CounterKind,
+			name: "custom.ether0.txBytes",
+			opts: GraphDefOptions{
+				Name: "custom.#",
+				Kind: core.Float64NumberKind,
+			},
+			want: &mackerel.GraphDefsParam{
+				Name: "custom.#",
+				Unit: "float",
+				Metrics: []*mackerel.GraphDefsMetric{
+					{Name: "custom.#.*"},
+				},
+			},
+		},
+		{
+			desc: "simple_measure",
+			kind: export.MeasureKind,
+			name: "custom.http.latency",
+			opts: GraphDefOptions{},
+			want: &mackerel.GraphDefsParam{
+				Name: "custom.http.latency",
+				Unit: "integer",
+				Metrics: []*mackerel.GraphDefsMetric{
+					{Name: "custom.http.latency.*"},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
-		s := generalizeMetricName(tt.name)
-		if s != tt.want {
-			t.Errorf("generalizeMetricName(%q) = %q; want %q", tt.name, s, tt.want)
-		}
+		t.Run(tt.desc, func(t *testing.T) {
+			g, err := NewGraphDef(tt.name, tt.kind, tt.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(g, tt.want) {
+				t.Errorf("NewGraphDef(%s, %v, opts) = %v; want %v", tt.name, tt.kind, g, tt.want)
+			}
+		})
 	}
 }
 
