@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 
 	"github.com/lufia/mackerelexporter-go/internal/metric"
+	"github.com/lufia/mackerelexporter-go/internal/resource"
 	"github.com/mackerelio/mackerel-client-go"
 )
 
@@ -112,7 +113,7 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 }
 
 type registration struct {
-	res      *Resource
+	res      *resource.Resource
 	graphDef *mackerel.GraphDefsParam
 	metrics  []*mackerel.MetricValue
 }
@@ -204,9 +205,9 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	desc := r.Descriptor()
 	kind := desc.NumberKind()
 
-	var res Resource
+	var res resource.Resource
 	labels := r.Labels().Ordered()
-	if err := UnmarshalLabels(labels, &res); err != nil {
+	if err := resource.UnmarshalLabels(labels, &res); err != nil {
 		return nil, err
 	}
 	reg.res = &res
