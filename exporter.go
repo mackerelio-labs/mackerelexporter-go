@@ -61,6 +61,11 @@ func WithAPIKey(apiKey string) func(o *options) {
 // WithQuantiles sets quantiles for recording measure metrics.
 // Each quantiles must be unique and its precision must be greater or equal than 0.01.
 func WithQuantiles(quantiles []float64) func(o *options) {
+	for _, q := range quantiles {
+		if q < 0.0 || q > 1.0 {
+			panic(aggregator.ErrInvalidQuantile)
+		}
+	}
 	return func(o *options) {
 		o.Quantiles = quantiles
 	}
@@ -85,8 +90,6 @@ type Exporter struct {
 
 var _ export.Exporter = &Exporter{}
 
-var defaultQuantiles = []float64{0.99, 0.90}
-
 // NewExporter creates a new Exporter.
 func NewExporter(opts ...Option) (*Exporter, error) {
 	var o options
@@ -94,7 +97,8 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 		opt(&o)
 	}
 	if o.Quantiles == nil {
-		o.Quantiles = defaultQuantiles
+		// This values equal to stdout exporter's values
+		o.Quantiles = []float64{0.5, 0.9, 0.99}
 	}
 	c := mackerel.NewClient(o.APIKey)
 	return &Exporter{
