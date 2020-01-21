@@ -67,12 +67,30 @@ func NewGraphDef(name string, kind export.MetricKind, opts GraphDefOptions) (*ma
 		return nil, errMismatch
 	}
 	return &mackerel.GraphDefsParam{
-		Name: opts.Name,
-		Unit: graphUnit(opts.Unit, opts.Kind),
+		Name:        opts.Name,
+		DisplayName: opts.Name,
+		Unit:        graphUnit(opts.Unit, opts.Kind),
 		Metrics: []*mackerel.GraphDefsMetric{
-			{Name: r},
+			{Name: r, DisplayName: metricDisplayName(r)},
 		},
 	}, nil
+}
+
+func metricDisplayName(name string) string {
+	a := strings.Split(name, metricNameSep)
+	if len(a) == 0 {
+		return ""
+	}
+	var n int
+	for _, s := range a {
+		if s == "*" {
+			n++
+		}
+	}
+	if n == 0 {
+		return a[len(a)-1]
+	}
+	return fmt.Sprintf("%%%d", n)
 }
 
 // PercentileName returns "percentile_xx".

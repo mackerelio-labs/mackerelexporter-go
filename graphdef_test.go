@@ -23,10 +23,14 @@ func TestNewGraphDef(t *testing.T) {
 			name: "custom.ether0.txBytes",
 			opts: GraphDefOptions{},
 			want: &mackerel.GraphDefsParam{
-				Name: "custom.ether0",
-				Unit: "integer",
+				Name:        "custom.ether0",
+				DisplayName: "custom.ether0",
+				Unit:        "integer",
 				Metrics: []*mackerel.GraphDefsMetric{
-					{Name: "custom.ether0.*"},
+					{
+						Name:        "custom.ether0.*",
+						DisplayName: "%1",
+					},
 				},
 			},
 		},
@@ -39,10 +43,14 @@ func TestNewGraphDef(t *testing.T) {
 				Kind: core.Float64NumberKind,
 			},
 			want: &mackerel.GraphDefsParam{
-				Name: "custom.#",
-				Unit: "float",
+				Name:        "custom.#",
+				DisplayName: "custom.#",
+				Unit:        "float",
 				Metrics: []*mackerel.GraphDefsMetric{
-					{Name: "custom.#.*"},
+					{
+						Name:        "custom.#.*",
+						DisplayName: "%1",
+					},
 				},
 			},
 		},
@@ -52,10 +60,33 @@ func TestNewGraphDef(t *testing.T) {
 			name: "custom.http.latency",
 			opts: GraphDefOptions{},
 			want: &mackerel.GraphDefsParam{
-				Name: "custom.http.latency",
-				Unit: "integer",
+				Name:        "custom.http.latency",
+				DisplayName: "custom.http.latency",
+				Unit:        "integer",
 				Metrics: []*mackerel.GraphDefsMetric{
-					{Name: "custom.http.latency.*"},
+					{
+						Name:        "custom.http.latency.*",
+						DisplayName: "%1",
+					},
+				},
+			},
+		},
+		{
+			desc: "multiple_wildcard",
+			kind: export.MeasureKind,
+			name: "custom.http.index.latency",
+			opts: GraphDefOptions{
+				Name: "custom.http.#.*",
+			},
+			want: &mackerel.GraphDefsParam{
+				Name:        "custom.http.#.*",
+				DisplayName: "custom.http.#.*",
+				Unit:        "integer",
+				Metrics: []*mackerel.GraphDefsMetric{
+					{
+						Name:        "custom.http.#.*.*",
+						DisplayName: "%2",
+					},
 				},
 			},
 		},
