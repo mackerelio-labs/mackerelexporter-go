@@ -36,7 +36,7 @@ func NewExportPipeline(opts ...Option) (*push.Controller, error) {
 	if err != nil {
 		return nil, err
 	}
-	batcher := defaultkeys.New(s, metricsdk.NewDefaultLabelEncoder(), true)
+	batcher := defaultkeys.New(s, metricsdk.NewDefaultLabelEncoder(), false)
 	pusher := push.New(batcher, exporter, time.Minute)
 	pusher.Start()
 	return pusher, nil
