@@ -1,9 +1,9 @@
 // +build !windows
 
-package mackerel
+package metric
 
 // see https://mackerel.io/docs/entry/spec/metrics
-var systemMetrics = []MetricName{
+var systemMetrics = []string{
 	"loadavg1",
 	"loadavg5",
 	"loadavg15",

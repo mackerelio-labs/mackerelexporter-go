@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/controller/push"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 
+	"github.com/lufia/mackerelexporter-go/internal/metric"
+	"github.com/lufia/mackerelexporter-go/internal/resource"
 	"github.com/mackerelio/mackerel-client-go"
 )
 
@@ -111,7 +113,7 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 }
 
 type registration struct {
-	res      *Resource
+	res      *resource.Resource
 	graphDef *mackerel.GraphDefsParam
 	metrics  []*mackerel.MetricValue
 }
@@ -203,15 +205,15 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	desc := r.Descriptor()
 	kind := desc.NumberKind()
 
-	var res Resource
+	var res resource.Resource
 	labels := r.Labels().Ordered()
-	if err := UnmarshalLabels(labels, &res); err != nil {
+	if err := resource.UnmarshalLabels(labels, &res); err != nil {
 		return nil, err
 	}
 	reg.res = &res
 
 	// TODO(lufia): Enforce the metric to be the custom metric if hint is exist
-	name := CanonicalMetricName(desc.Name())
+	name := metric.Canonical(desc.Name())
 	hint := e.lookupHint(desc.Name())
 	aggr := r.Aggregator()
 	reg.metrics = e.metricValues(name, aggr, kind)
@@ -236,8 +238,8 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 
 func (e *Exporter) lookupHint(name string) string {
 	for _, s := range e.opts.Hints {
-		if MetricName(s).Match(name) {
-			return CanonicalMetricName(s)
+		if metric.Match(name, s) {
+			return metric.Canonical(s)
 		}
 	}
 	return ""
@@ -250,18 +252,18 @@ func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.N
 	if p, ok := aggr.(aggregator.Distribution); ok {
 		// export.MeasureKind: MinMaxSumCount, Distribution, Points
 		if min, err := p.Min(); err == nil {
-			a = append(a, metricValue(JoinMetricName(name, "min"), min.AsInterface(kind)))
+			a = append(a, metricValue(metric.Join(name, "min"), min.AsInterface(kind)))
 		}
 		if max, err := p.Max(); err == nil {
-			a = append(a, metricValue(JoinMetricName(name, "max"), max.AsInterface(kind)))
+			a = append(a, metricValue(metric.Join(name, "max"), max.AsInterface(kind)))
 		}
 		for _, quantile := range e.opts.Quantiles {
 			q, err := p.Quantile(quantile)
 			if err != nil {
 				continue
 			}
-			qname := PercentileName(quantile)
-			a = append(a, metricValue(JoinMetricName(name, qname), q.AsInterface(kind)))
+			qname := metric.Percentile(quantile)
+			a = append(a, metricValue(metric.Join(name, qname), q.AsInterface(kind)))
 		}
 	} else if p, ok := aggr.(aggregator.LastValue); ok {
 		// export.GaugeKind: LastValue
