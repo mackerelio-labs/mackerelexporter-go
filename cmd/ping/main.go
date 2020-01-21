@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"time"
 
 	"go.opentelemetry.io/otel/api/core"
@@ -27,31 +29,49 @@ var (
 	}
 
 	hints = []string{
-		"handlers.#.latency",
+		"http.handlers.#.latency",
 	}
 
 	quantiles = []float64{0.99, 0.90, 0.85}
 
-	meter   = global.MeterProvider().Meter("example/ping")
-	counter = meter.NewInt64Counter("handlers.requests.count", metric.WithKeys(keys...))
-	measure = meter.NewFloat64Measure("handlers.index.latency", metric.WithKeys(keys...))
-	gauge   = meter.NewInt64Gauge("handlers.last_accessed", metric.WithKeys(keys...))
+	meter    = global.MeterProvider().Meter("example/ping")
+	gcCount  = meter.NewInt64Counter("runtime.gc.count", metric.WithKeys(keys...))
+	memAlloc = meter.NewInt64Gauge("runtime.memory.alloc", metric.WithKeys(keys...))
+	latency  = meter.NewFloat64Measure("http.handlers.index.latency", metric.WithKeys(keys...))
+
+	labels = meter.Labels(
+		keyHostID.String("10-1-2-241"),
+		keyHostName.String("localhost"),
+	)
 )
+
+func startStats(ctx context.Context) {
+	var last uint32
+	go func() {
+		tick := time.NewTicker(10 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-tick.C:
+				var m runtime.MemStats
+				runtime.ReadMemStats(&m)
+				alloc := memAlloc.Measurement(int64(m.Alloc))
+				gc := gcCount.Measurement(int64(m.NumGC - last))
+				meter.RecordBatch(ctx, labels, alloc, gc)
+				last = m.NumGC
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	t0 := time.Now()
 	fmt.Fprintf(w, "OK")
 
-	counter.Add(ctx, 1, meter.Labels(
-		keyHostID.String("10-1-2-241"),
-		keyHostName.String("localhost"),
-	))
-	measure.Record(ctx, time.Since(t0).Seconds(), meter.Labels(
-		keyHostID.String("10-1-2-241"),
-		keyHostName.String("localhost"),
-	))
-	gauge.Set(ctx, time.Now().Unix(), meter.Labels(
+	latency.Record(ctx, time.Since(t0).Seconds(), meter.Labels(
 		keyHostID.String("10-1-2-241"),
 		keyHostName.String("localhost"),
 	))
@@ -70,6 +90,7 @@ func main() {
 	}
 	defer pusher.Stop()
 
+	startStats(context.Background())
 	http.HandleFunc("/", indexHandler)
 	http.ListenAndServe(":8080", nil)
 }
