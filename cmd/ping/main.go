@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/otel/api/global"
 	"go.opentelemetry.io/otel/api/key"
 	"go.opentelemetry.io/otel/api/metric"
-	"go.opentelemetry.io/otel/exporter/metric/stdout"
 
 	"github.com/lufia/mackerelexporter"
 )
@@ -66,14 +65,6 @@ func main() {
 		mackerel.WithQuantiles(quantiles),
 		mackerel.WithHints(hints),
 	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer pusher.Stop()
-
-	pusher, err = stdout.InstallNewPipeline(stdout.Config{
-		Quantiles: quantiles,
-	})
 	if err != nil {
 		log.Fatal(err)
 	}
