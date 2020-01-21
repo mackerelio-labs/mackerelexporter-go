@@ -1,4 +1,4 @@
-module github.com/lufia/mackerelexporter
+module github.com/lufia/mackerelexporter-go
 
 go 1.13
 

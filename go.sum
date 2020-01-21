@@ -121,6 +121,7 @@ github.com/kylelemons/godebug v0.0.0-20170820004349-d65d576e9348 h1:MtvEpTB6LX3v
 github.com/kylelemons/godebug v0.0.0-20170820004349-d65d576e9348/go.mod h1:B69LEHPfb2qLo0BaaOLcbitczOKLWTsrBG9LczfCD4k=
 github.com/lib/pq v1.2.0/go.mod h1:5WUZQaWbwv1U+lTReE5YruASi9Al49XbQIvNi/34Woo=
 github.com/logrusorgru/aurora v0.0.0-20181002194514-a7b3b318ed4e/go.mod h1:7rIyQOR62GCctdiQpZ/zOJlFyk6y+94wXzv6RNZgaR4=
+github.com/lufia/mackerelexporter-go v0.0.0-20200121142046-a2da4af7f5f5 h1:UB04DKwKyLHK118/OLayBtZX3e86UgT4eQ+xdkl2md0=
 github.com/mackerelio/mackerel-client-go v0.8.0 h1:qN3g3JVVNqh7lkXCU6xMshZq5wqUPDYvAK7UrRJyLB0=
 github.com/mackerelio/mackerel-client-go v0.8.0/go.mod h1:/FVnUK7nsg/MEBpIVOCZLYzdIwY5mg/SyAlXDnxVcAI=
 github.com/magiconair/properties v1.8.0/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=

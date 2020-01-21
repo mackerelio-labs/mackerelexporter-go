@@ -1,9 +1,9 @@
 // +build windows
 
-package mackerel
+package metric
 
 // see https://mackerel.io/docs/entry/spec/metrics
-var systemMetrics = []MetricName{
+var systemMetrics = []string{
 	"processor_queue_length",
 	"cpu.user.percentage",
 	"cpu.system.percentage",
