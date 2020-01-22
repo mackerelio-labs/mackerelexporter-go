@@ -19,7 +19,7 @@ After installation, you can start to write a program. There is the example at th
 ## Description
 
 ### Hosts
-Mackerel manages hosts database in the organization. Official mackerel-agent installed to the host, such as compute instance, bare metal or local machine collects host informations from resources provided by operating system.
+Mackerel manages hosts database in the organization. Official mackerel-agent installed to the host, such as compute instance, bare metal or local machine collects host informations from resources provided by operating system. The exporter won't access external resources. Instead host informations will be generated from labels attached to the metrics.
 
 For example, the host identifier that is unique in the organization refers the label `host.id`. Similarly the host name refers the label `host.name`. The exporter handles metrics attached these labels as host metric in Mackerel.
 
@@ -29,7 +29,7 @@ The exporter has a plan for support service metrics but it don't be implemented 
 ### Graph Definitions
 The exporter will create the Graph Definition on Mackerel if needed. Most cases it creates automatically based from recorded metric name. However you might think to want to customize the graph by wildcards in the graph name. In this case you can configure the exporter to use pre-defined graph name with *WithHints()* option.
 
-The hint is the name composed by deleted only the end of the metric name, and it can be replaced each elements by wildcard, # or *. For example the hint `http.handlers.#` is valid for the metric `http.handlers.index.count`.
+The hint is the name composed by deleted only the end of the metric name, and it can be replaced each elements by wildcard, `#` or `*`. For example the hint `http.handlers.#` is valid for the metric `http.handlers.index.count`.
 
 Special case. The exporter will append *.min*, *.max* and *.percentile_xx* implicitly to the end of the name for *measure* metric in OpenTelemetry. Thus count of elements of the hint will be same as the recorded metric name.
 
