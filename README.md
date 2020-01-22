@@ -1,15 +1,37 @@
 # mackerelexporter-go
 
-This is the OpenTelemetry Exporter for Mackerel.
+This is OpenTelemetry Meter Exporter for [Mackerel](https://mackerel.io/).
 
 [![GoDoc][godoc-image]][godoc-url]
 [![Actions Status][actions-image]][actions-url]
 
-## Hosts
-TODO
+## Installation
 
-## Graph Definitions
-TODO
+If you use Go Modules, then you just import OpenTelemetry API and the exporter.  Otherwise you can install manually.
+
+```console
+$ go get -u go.opentelemetry.io/otel
+$ go get -u github.com/lufia/mackerelexporter-go
+```
+
+After installation, you can start to write a program. There is the example at the Example section of this document.
+
+## Description
+
+### Hosts
+Mackerel manages hosts database in the organization. Official mackerel-agent installed to the host, such as compute instance, bare metal or local machine collects host informations from resources provided by operating system.
+
+For example, the host identifier that is unique in the organization refers the label `host.id`. Similarly the host name refers the label `host.name`. The exporter handles metrics attached these labels as host metric in Mackerel.
+
+### Services
+The exporter has a plan for support service metrics but it don't be implemented yet.
+
+### Graph Definitions
+The exporter will create the Graph Definition on Mackerel if needed. Most cases it creates automatically based from recorded metric name. However you might think to want to customize the graph by wildcards in the graph name. In this case you can configure the exporter to use pre-defined graph name with *WithHints()* option.
+
+The hint is the name composed by deleted only the end of the metric name, and it can be replaced each elements by wildcard, # or *. For example the hint `http.handlers.#` is valid for the metric `http.handlers.index.count`.
+
+Special case. The exporter will append *.min*, *.max* and *.percentile_xx* implicitly to the end of the name for *measure* metric in OpenTelemetry. Thus count of elements of the hint will be same as the recorded metric name.
 
 ## Example
 
