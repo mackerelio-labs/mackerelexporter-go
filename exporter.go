@@ -119,6 +119,7 @@ type registration struct {
 	metrics  []*mackerel.MetricValue
 }
 
+// Export exports the provide metric record to Mackerel.
 func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	var regs []*registration
 	a.ForEach(func(r export.Record) {
