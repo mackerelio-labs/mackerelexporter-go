@@ -7,12 +7,75 @@ import (
 	"github.com/mackerelio/mackerel-client-go"
 )
 
+func (e *Exporter) registerService(name string) error {
+	if _, ok := e.serviceRoles[name]; ok {
+		return nil
+	}
+	a, err := e.c.FindServices()
+	if err != nil {
+		return err
+	}
+	for _, s := range a {
+		if s.Name == name {
+			e.serviceRoles[name] = nil
+			return nil
+		}
+	}
+
+	param := mackerel.CreateServiceParam{
+		Name: name,
+	}
+	if _, err = e.c.CreateService(&param); err != nil {
+		return err
+	}
+	e.serviceRoles[name] = nil
+	return nil
+}
+
+func (e *Exporter) registerServiceRole(s, role string) error {
+	if err := e.registerService(s); err != nil {
+		return err
+	}
+	if _, ok := e.serviceRoles[s][role]; ok {
+		return nil
+	}
+	a, err := e.c.FindRoles(s)
+	if err != nil {
+		return err
+	}
+	for _, r := range a {
+		if r.Name == role {
+			e.serviceRoles[s][role] = struct{}{}
+			return nil
+		}
+	}
+
+	param := mackerel.CreateRoleParam{
+		Name: role,
+	}
+	if _, err := e.c.CreateRole(s, &param); err != nil {
+		return err
+	}
+	e.serviceRoles[s][role] = struct{}{}
+	return nil
+}
+
 // upsertHost update or insert the host with r.
 func (e *Exporter) upsertHost(r *resource.Resource) (string, error) {
-	// TODO(lufia): We would require to redesign whether using mackerel-client-go or not.
 	param := mackerel.CreateHostParam{
 		Name:             r.Hostname(),
 		CustomIdentifier: r.CustomIdentifier(),
+	}
+	if roleFullname := r.RoleFullname(); roleFullname != "" {
+		s := r.ServiceName()
+		role := r.RoleName()
+		if err := e.registerService(s); err != nil {
+			return "", err
+		}
+		if err := e.registerServiceRole(s, role); err != nil {
+			return "", err
+		}
+		param.RoleFullnames = []string{roleFullname}
 	}
 	if r.Cloud.Provider != "" {
 		param.Meta = mackerel.HostMeta{
@@ -46,22 +109,4 @@ func (e *Exporter) lookupHostID(customIdentifier string) (string, error) {
 		return "", nil
 	}
 	return a[0].ID, nil
-}
-
-func (e *Exporter) createService(name string) error {
-	a, err := e.c.FindServices()
-	if err != nil {
-		return err
-	}
-	for _, s := range a {
-		if s.Name == name {
-			return nil
-		}
-	}
-
-	param := mackerel.CreateServiceParam{
-		Name: name,
-	}
-	_, err = e.c.CreateService(&param)
-	return err
 }

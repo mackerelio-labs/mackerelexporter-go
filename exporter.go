@@ -87,6 +87,7 @@ type Exporter struct {
 	opts *options
 
 	hosts           map[string]string // value is Mackerel's host ID
+	serviceRoles    map[string]map[string]struct{}
 	graphDefs       map[string]*mackerel.GraphDefsParam
 	graphMetricDefs map[string]struct{}
 }
@@ -163,7 +164,7 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 			}
 		case serviceName:
 			name := string(s)
-			if err := e.createService(name); err != nil {
+			if err := e.registerService(name); err != nil {
 				return err
 			}
 			serviceMetrics[name] = append(serviceMetrics[name], reg.metrics...)
