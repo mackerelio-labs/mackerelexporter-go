@@ -1,4 +1,4 @@
-package mackerel
+package graphdef
 
 import (
 	"reflect"
@@ -9,19 +9,19 @@ import (
 	export "go.opentelemetry.io/otel/sdk/export/metric"
 )
 
-func TestNewGraphDef(t *testing.T) {
+func TestNew(t *testing.T) {
 	tests := []struct {
 		desc string
 		kind export.MetricKind
 		name string
-		opts GraphDefOptions
+		opts Options
 		want *mackerel.GraphDefsParam
 	}{
 		{
 			desc: "simple_counter",
 			kind: export.CounterKind,
 			name: "custom.ether0.txBytes",
-			opts: GraphDefOptions{},
+			opts: Options{},
 			want: &mackerel.GraphDefsParam{
 				Name:        "custom.ether0",
 				DisplayName: "custom.ether0",
@@ -38,7 +38,7 @@ func TestNewGraphDef(t *testing.T) {
 			desc: "counter_with_options",
 			kind: export.CounterKind,
 			name: "custom.ether0.txBytes",
-			opts: GraphDefOptions{
+			opts: Options{
 				Name: "custom.#",
 				Kind: core.Float64NumberKind,
 			},
@@ -58,7 +58,7 @@ func TestNewGraphDef(t *testing.T) {
 			desc: "simple_measure",
 			kind: export.MeasureKind,
 			name: "custom.http.latency",
-			opts: GraphDefOptions{},
+			opts: Options{},
 			want: &mackerel.GraphDefsParam{
 				Name:        "custom.http.latency",
 				DisplayName: "custom.http.latency",
@@ -75,7 +75,7 @@ func TestNewGraphDef(t *testing.T) {
 			desc: "multiple_wildcard",
 			kind: export.MeasureKind,
 			name: "custom.http.index.latency",
-			opts: GraphDefOptions{
+			opts: Options{
 				Name: "custom.http.#.*",
 			},
 			want: &mackerel.GraphDefsParam{
@@ -93,12 +93,12 @@ func TestNewGraphDef(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			g, err := NewGraphDef(tt.name, tt.kind, tt.opts)
+			g, err := New(tt.name, tt.kind, tt.opts)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !reflect.DeepEqual(g, tt.want) {
-				t.Errorf("NewGraphDef(%s, %v, opts) = %v; want %v", tt.name, tt.kind, g, tt.want)
+				t.Errorf("New(%s, %v, opts) = %v; want %v", tt.name, tt.kind, g, tt.want)
 			}
 		})
 	}

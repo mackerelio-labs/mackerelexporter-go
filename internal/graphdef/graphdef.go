@@ -1,4 +1,4 @@
-package mackerel
+package graphdef
 
 import (
 	"errors"
@@ -18,8 +18,8 @@ const (
 	unitMilliseconds  = unit.Milliseconds
 )
 
-// GraphDefOptions represents options for customizing Mackerel's Graph Definition.
-type GraphDefOptions struct {
+// Options represents options for customizing Mackerel's Graph Definition.
+type Options struct {
 	Name      string
 	Unit      unit.Unit
 	Kind      core.NumberKind
@@ -28,8 +28,8 @@ type GraphDefOptions struct {
 
 var errMismatch = errors.New("mismatched metric names")
 
-// NewGraphDef returns Mackerel's Graph Definition. Each names in arguments must be canonicalized.
-func NewGraphDef(name string, kind export.MetricKind, opts GraphDefOptions) (*mackerel.GraphDefsParam, error) {
+// New returns Mackerel's Graph Definition. Each names in arguments must be canonicalized.
+func New(name string, kind export.MetricKind, opts Options) (*mackerel.GraphDefsParam, error) {
 	if opts.Unit == "" {
 		opts.Unit = unitDimensionless
 	}
