@@ -7,8 +7,8 @@ import (
 	"github.com/mackerelio/mackerel-client-go"
 )
 
-// UpsertHost update or insert the host with r.
-func (e *Exporter) UpsertHost(r *resource.Resource) (string, error) {
+// upsertHost update or insert the host with r.
+func (e *Exporter) upsertHost(r *resource.Resource) (string, error) {
 	// TODO(lufia): We would require to redesign whether using mackerel-client-go or not.
 	param := mackerel.CreateHostParam{
 		Name:             r.Hostname(),

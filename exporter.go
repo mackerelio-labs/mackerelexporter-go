@@ -139,7 +139,7 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 			continue
 		}
 		if _, ok := e.hosts[id]; !ok {
-			h, err := e.UpsertHost(reg.res)
+			h, err := e.upsertHost(reg.res)
 			if err != nil {
 				return err
 			}
