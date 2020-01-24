@@ -93,6 +93,11 @@ func (r *Resource) CustomIdentifier() string {
 	return strings.Join(a, resourceNameSep)
 }
 
+// ServiceName returns a service name.
+func (r *Resource) ServiceName() string {
+	return r.Service.NS
+}
+
 // UnmarshalLabels parses labels and store the result into v.
 func UnmarshalLabels(labels []core.KeyValue, v interface{}) error {
 	p := reflect.ValueOf(v)

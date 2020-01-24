@@ -113,11 +113,16 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 	}, nil
 }
 
-type registration struct {
-	res      *resource.Resource
-	graphDef *mackerel.GraphDefsParam
-	metrics  []*mackerel.MetricValue
-}
+type (
+	registration struct {
+		res      *resource.Resource
+		graphDef *mackerel.GraphDefsParam
+		metrics  []*mackerel.MetricValue
+	}
+
+	customIdentifier string
+	serviceName      string
+)
 
 // Export exports the provide metric record to Mackerel.
 func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
@@ -131,20 +136,39 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 		regs = append(regs, reg)
 	})
 
-	var metrics []*mackerel.HostMetricValue
-	graphDefs := make(map[string]*mackerel.GraphDefsParam)
+	var (
+		hostMetrics    []*mackerel.HostMetricValue
+		serviceMetrics = make(map[string][]*mackerel.MetricValue)
+		graphDefs      = make(map[string]*mackerel.GraphDefsParam)
+	)
 	for _, reg := range regs {
 		// TODO(lufia): post service metrics if host.id is not set and service.name is set.
-		id := reg.res.CustomIdentifier()
-		if id == "" {
-			continue
-		}
-		if _, ok := e.hosts[id]; !ok {
-			h, err := e.upsertHost(reg.res)
-			if err != nil {
+		switch t := metricType(reg.res); s := t.(type) {
+		case customIdentifier:
+			id := string(s)
+			if _, ok := e.hosts[id]; !ok {
+				h, err := e.upsertHost(reg.res)
+				if err != nil {
+					return err
+				}
+				e.hosts[id] = h
+			}
+
+			hostID := e.hosts[id]
+			for _, m := range reg.metrics {
+				hostMetrics = append(hostMetrics, &mackerel.HostMetricValue{
+					HostID:      hostID,
+					MetricValue: m,
+				})
+			}
+		case serviceName:
+			name := string(s)
+			if err := e.createService(name); err != nil {
 				return err
 			}
-			e.hosts[id] = h
+			serviceMetrics[name] = append(serviceMetrics[name], reg.metrics...)
+		default:
+			continue
 		}
 
 		if reg.graphDef != nil {
@@ -160,14 +184,6 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 				}
 			}
 		}
-
-		hostID := e.hosts[id]
-		for _, m := range reg.metrics {
-			metrics = append(metrics, &mackerel.HostMetricValue{
-				HostID:      hostID,
-				MetricValue: m,
-			})
-		}
 	}
 
 	var defs []*mackerel.GraphDefsParam
@@ -181,10 +197,25 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 		e.mergeGraphDefs(graphDefs)
 	}
 
-	if len(metrics) > 0 {
-		if err := e.c.PostHostMetricValues(metrics); err != nil {
-			return fmt.Errorf("can't post metrics: %w", err)
+	if len(hostMetrics) > 0 {
+		if err := e.c.PostHostMetricValues(hostMetrics); err != nil {
+			return fmt.Errorf("can't post host metrics: %w", err)
 		}
+	}
+	for s, a := range serviceMetrics {
+		if err := e.c.PostServiceMetricValues(s, a); err != nil {
+			return fmt.Errorf("can't post service metrics: %w", err)
+		}
+	}
+	return nil
+}
+
+func metricType(res *resource.Resource) interface{} {
+	if s := res.CustomIdentifier(); s != "" {
+		return customIdentifier(s)
+	}
+	if s := res.ServiceName(); s != "" {
+		return serviceName(s)
 	}
 	return nil
 }

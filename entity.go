@@ -47,3 +47,21 @@ func (e *Exporter) lookupHostID(customIdentifier string) (string, error) {
 	}
 	return a[0].ID, nil
 }
+
+func (e *Exporter) createService(name string) error {
+	a, err := e.c.FindServices()
+	if err != nil {
+		return err
+	}
+	for _, s := range a {
+		if s.Name == name {
+			return nil
+		}
+	}
+
+	param := mackerel.CreateServiceParam{
+		Name: name,
+	}
+	_, err = e.c.CreateService(&param)
+	return err
+}
