@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/controller/push"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 
+	"github.com/lufia/mackerelexporter-go/internal/graphdef"
 	"github.com/lufia/mackerelexporter-go/internal/metric"
 	"github.com/lufia/mackerelexporter-go/internal/resource"
 	"github.com/mackerelio/mackerel-client-go"
@@ -221,13 +222,13 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	if !strings.HasPrefix(name, "custom.") {
 		return &reg, nil
 	}
-	opts := GraphDefOptions{
+	opts := graphdef.Options{
 		Name:      hint,
 		Unit:      desc.Unit(),
 		Kind:      kind,
 		Quantiles: e.opts.Quantiles,
 	}
-	g, err := NewGraphDef(name, desc.MetricKind(), opts)
+	g, err := graphdef.New(name, desc.MetricKind(), opts)
 	if err != nil {
 		return nil, err
 	}
