@@ -109,6 +109,7 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 		c:               c,
 		opts:            &o,
 		hosts:           make(map[string]string),
+		serviceRoles:    make(map[string]map[string]struct{}),
 		graphDefs:       make(map[string]*mackerel.GraphDefsParam),
 		graphMetricDefs: make(map[string]struct{}),
 	}, nil
@@ -143,7 +144,6 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 		graphDefs      = make(map[string]*mackerel.GraphDefsParam)
 	)
 	for _, reg := range regs {
-		// TODO(lufia): post service metrics if host.id is not set and service.name is set.
 		switch t := metricType(reg.res); s := t.(type) {
 		case customIdentifier:
 			id := string(s)

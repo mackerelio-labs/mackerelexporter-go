@@ -45,7 +45,7 @@ import (
 	"go.opentelemetry.io/otel/api/key"
 	"go.opentelemetry.io/otel/api/metric"
 
-	"github.com/lufia/mackerelexporter"
+	"github.com/lufia/mackerelexporter-go"
 )
 
 var (

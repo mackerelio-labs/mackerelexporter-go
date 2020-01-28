@@ -17,7 +17,7 @@ func (e *Exporter) registerService(name string) error {
 	}
 	for _, s := range a {
 		if s.Name == name {
-			e.serviceRoles[name] = nil
+			e.serviceRoles[name] = make(map[string]struct{})
 			return nil
 		}
 	}
@@ -28,7 +28,7 @@ func (e *Exporter) registerService(name string) error {
 	if _, err = e.c.CreateService(&param); err != nil {
 		return err
 	}
-	e.serviceRoles[name] = nil
+	e.serviceRoles[name] = make(map[string]struct{})
 	return nil
 }
 
@@ -69,9 +69,6 @@ func (e *Exporter) upsertHost(r *resource.Resource) (string, error) {
 	if roleFullname := r.RoleFullname(); roleFullname != "" {
 		s := r.ServiceName()
 		role := r.RoleName()
-		if err := e.registerService(s); err != nil {
-			return "", err
-		}
 		if err := e.registerServiceRole(s, role); err != nil {
 			return "", err
 		}
