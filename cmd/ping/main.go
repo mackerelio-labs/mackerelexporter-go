@@ -14,18 +14,22 @@ import (
 	"go.opentelemetry.io/otel/api/key"
 	"go.opentelemetry.io/otel/api/metric"
 
-	"github.com/lufia/mackerelexporter"
+	"github.com/lufia/mackerelexporter-go"
 )
 
 // https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/example_test.go
 
 var (
-	keyHostID   = key.New("host.id")   // custom identifier
-	keyHostName = key.New("host.name") // hostname
+	keyHostID      = key.New("host.id")           // custom identifier
+	keyHostName    = key.New("host.name")         // hostname
+	keyServiceNS   = key.New("service.namespace") // service
+	keyServiceName = key.New("service.name")      // role
 
 	keys = []core.Key{
 		keyHostID,
 		keyHostName,
+		keyServiceNS,
+		keyServiceName,
 	}
 
 	hints = []string{
@@ -42,6 +46,15 @@ var (
 	labels = meter.Labels(
 		keyHostID.String("10-1-2-241"),
 		keyHostName.String("localhost"),
+		keyServiceNS.String("example"),
+		keyServiceName.String("ping"),
+	)
+
+	requestCount = meter.NewInt64Counter("http.requests.count", metric.WithKeys(keys...))
+
+	serviceLabels = meter.Labels(
+		keyServiceNS.String("example"),
+		keyServiceName.String("ping"),
 	)
 )
 
@@ -69,12 +82,10 @@ func startStats(ctx context.Context) {
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	t0 := time.Now()
-	fmt.Fprintf(w, "OK")
+	fmt.Fprintf(w, "OK\n")
 
-	latency.Record(ctx, time.Since(t0).Seconds(), meter.Labels(
-		keyHostID.String("10-1-2-241"),
-		keyHostName.String("localhost"),
-	))
+	latency.Record(ctx, time.Since(t0).Seconds(), labels)
+	requestCount.Add(ctx, 1, serviceLabels)
 }
 
 func main() {
