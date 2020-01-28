@@ -24,7 +24,22 @@ Mackerel manages hosts database in the organization. Official mackerel-agent ins
 For example, the host identifier that is unique in the organization refers the label `host.id`. Similarly the host name refers the label `host.name`. The exporter handles metrics attached these labels as host metric in Mackerel.
 
 ### Services
-The exporter has a plan for support service metrics but it don't be implemented yet.
+Like as hosts, both Service and Role are made from labels. Label `service.namespace` is mapped to Service, and the label `service.name` is mapped Role.
+
+### Where post are metrics?
+The metrics with a label below will post as Host Metric.
+
+- `host.id`
+
+Also the metrics with these all labels below will post as Host Metric.
+
+- `service.namespace`
+- `service.name`
+- `service.instance.id`
+
+The metric with a labels below will post as Service Metric.
+
+- `service.namespace`
 
 ### Graph Definitions
 The exporter will create the Graph Definition on Mackerel if needed. Most cases it creates automatically based from recorded metric name. However you might think to want to customize the graph by wildcards in the graph name. In this case you can configure the exporter to use pre-defined graph name with *WithHints()* option.
