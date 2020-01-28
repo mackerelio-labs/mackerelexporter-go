@@ -78,8 +78,10 @@ func (r *Resource) CustomIdentifier() string {
 	if r.Host.ID != "" {
 		return r.Host.ID
 	}
+	if r.Service.Instance.ID == "" {
+		return ""
+	}
 
-	// TODO(lufia): This may change to equal to mackerel-agent.
 	a := make([]string, 0, 3)
 	if s := r.Service.NS; s != "" {
 		a = append(a, s)
@@ -90,7 +92,7 @@ func (r *Resource) CustomIdentifier() string {
 	if s := r.Service.Instance.ID; s != "" {
 		a = append(a, s)
 	}
-	return strings.Join(a, resourceNameSep)
+	return strings.Join(a, ".")
 }
 
 // ServiceName returns a service name.

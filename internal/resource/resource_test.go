@@ -72,3 +72,42 @@ func lookupInterfaceMap(v interface{}, keys ...string) interface{} {
 	}
 	return v
 }
+
+func TestCustomIdentifier(t *testing.T) {
+	tests := []struct {
+		r    Resource
+		want string
+	}{
+		{
+			r: Resource{
+				Host: HostResource{ID: "host_id"},
+			},
+			want: "host_id",
+		},
+		{
+			r: Resource{
+				Service: ServiceResource{
+					NS:       "ns",
+					Name:     "name",
+					Instance: InstanceResource{ID: "i-xxx"},
+				},
+			},
+			want: "ns:name:i-xxx",
+		},
+		{
+			r: Resource{
+				Service: ServiceResource{
+					NS:   "ns",
+					Name: "name",
+				},
+			},
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		s := tt.r.CustomIdentifier()
+		if s != tt.want {
+			t.Errorf("CustomIdentifier = %q; want %q", s, tt.want)
+		}
+	}
+}
