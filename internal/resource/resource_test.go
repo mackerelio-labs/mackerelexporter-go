@@ -92,7 +92,7 @@ func TestCustomIdentifier(t *testing.T) {
 					Instance: InstanceResource{ID: "i-xxx"},
 				},
 			},
-			want: "ns:name:i-xxx",
+			want: "ns.name.i-xxx",
 		},
 		{
 			r: Resource{
