@@ -3,6 +3,7 @@ package mackerel
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -52,6 +53,7 @@ type options struct {
 	APIKey    string
 	Quantiles []float64
 	Hints     []string
+	BaseURL   *url.URL
 }
 
 // WithAPIKey sets the Mackerel API Key.
@@ -81,6 +83,13 @@ func WithHints(hints []string) func(o *options) {
 	}
 }
 
+// WithBaseURL sets base URL for Mackerel API.
+func WithBaseURL(baseURL *url.URL) func(o *options) {
+	return func(o *options) {
+		o.BaseURL = baseURL
+	}
+}
+
 // Exporter is a stats exporter that uploads data to Mackerel.
 type Exporter struct {
 	c    *mackerel.Client
@@ -105,6 +114,7 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 		o.Quantiles = []float64{0.5, 0.9, 0.99}
 	}
 	c := mackerel.NewClient(o.APIKey)
+	c.BaseURL = o.BaseURL
 	return &Exporter{
 		c:               c,
 		opts:            &o,
