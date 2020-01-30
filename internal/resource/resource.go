@@ -26,32 +26,32 @@ var (
 
 // Resource represents a resource constructed with labels.
 type Resource struct {
-	Service ServiceResource `resource:"service"`
-	Host    HostResource    `resource:"host"`
-	Cloud   CloudResource   `resource:"cloud"`
+	Service Service `resource:"service"`
+	Host    Host    `resource:"host"`
+	Cloud   Cloud   `resource:"cloud"`
 }
 
-// ServiceResource represents the standard service attributes.
-type ServiceResource struct {
-	Name     string           `resource:"name"`
-	NS       string           `resource:"namespace"`
-	Instance InstanceResource `resource:"instance"`
-	Version  string           `resource:"version"`
+// Service represents the standard service attributes.
+type Service struct {
+	Name     string   `resource:"name"`
+	NS       string   `resource:"namespace"`
+	Instance Instance `resource:"instance"`
+	Version  string   `resource:"version"`
 }
 
-// InstanceResource represents the standard instance attributes.
-type InstanceResource struct {
+// Instance represents the standard instance attributes.
+type Instance struct {
 	ID string `resource:"id"`
 }
 
-// HostResource represents the standard host attributes.
-type HostResource struct {
+// Host represents the standard host attributes.
+type Host struct {
 	ID   string `resource:"id"`
 	Name string `resource:"name"`
 }
 
-// CloudResource represents the standard cloud attributes.
-type CloudResource struct {
+// Cloud represents the standard cloud attributes.
+type Cloud struct {
 	Provider string `resource:"provider"`
 }
 
@@ -60,17 +60,13 @@ func (r *Resource) Hostname() string {
 	if r.Host.Name != "" {
 		return r.Host.Name
 	}
-	if r.Service.Instance.ID != "" {
-		prefix := ""
-		if r.Service.Name != "" {
-			prefix = r.Service.Name + "-"
-		}
-		return prefix + r.Service.Instance.ID
-	}
-	if s, err := os.Hostname(); err == nil {
+	if s := r.nameFromService("-"); s != "" {
 		return s
 	}
-	return ""
+	if s, _ := os.Hostname(); s != "" {
+		return s
+	}
+	return "localhost"
 }
 
 // CustomIdentifier returns a proper customIdentifier for the host.
@@ -78,10 +74,13 @@ func (r *Resource) CustomIdentifier() string {
 	if r.Host.ID != "" {
 		return r.Host.ID
 	}
+	return r.nameFromService("/")
+}
+
+func (r *Resource) nameFromService(sep string) string {
 	if r.Service.Instance.ID == "" {
 		return ""
 	}
-
 	a := make([]string, 0, 3)
 	if s := r.Service.NS; s != "" {
 		a = append(a, s)
@@ -92,7 +91,7 @@ func (r *Resource) CustomIdentifier() string {
 	if s := r.Service.Instance.ID; s != "" {
 		a = append(a, s)
 	}
-	return strings.Join(a, ".")
+	return strings.Join(a, sep)
 }
 
 // ServiceName returns a service name.

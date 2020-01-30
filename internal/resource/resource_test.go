@@ -9,10 +9,10 @@ import (
 
 func TestUnmarshalLabels(t *testing.T) {
 	want := Resource{
-		Service: ServiceResource{
+		Service: Service{
 			Name:     "name",
 			NS:       "ns1",
-			Instance: InstanceResource{ID: "0000-1111"},
+			Instance: Instance{ID: "0000-1111"},
 			Version:  "a:1.1",
 		},
 	}
@@ -33,10 +33,10 @@ func TestUnmarshalLabels(t *testing.T) {
 
 func TestUnmarshalLabelsInterface(t *testing.T) {
 	want := Resource{
-		Service: ServiceResource{
+		Service: Service{
 			Name:     "name",
 			NS:       "ns1",
-			Instance: InstanceResource{ID: "0000-1111"},
+			Instance: Instance{ID: "0000-1111"},
 			Version:  "a:1.1",
 		},
 	}
@@ -80,23 +80,23 @@ func TestCustomIdentifier(t *testing.T) {
 	}{
 		{
 			r: Resource{
-				Host: HostResource{ID: "host_id"},
+				Host: Host{ID: "host_id"},
 			},
 			want: "host_id",
 		},
 		{
 			r: Resource{
-				Service: ServiceResource{
+				Service: Service{
 					NS:       "ns",
 					Name:     "name",
-					Instance: InstanceResource{ID: "i-xxx"},
+					Instance: Instance{ID: "i-xxx"},
 				},
 			},
-			want: "ns.name.i-xxx",
+			want: "ns/name/i-xxx",
 		},
 		{
 			r: Resource{
-				Service: ServiceResource{
+				Service: Service{
 					NS:   "ns",
 					Name: "name",
 				},
