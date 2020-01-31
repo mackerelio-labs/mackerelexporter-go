@@ -114,7 +114,9 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 		o.Quantiles = []float64{0.5, 0.9, 0.99}
 	}
 	c := mackerel.NewClient(o.APIKey)
-	c.BaseURL = o.BaseURL
+	if o.BaseURL != nil {
+		c.BaseURL = o.BaseURL
+	}
 	return &Exporter{
 		c:               c,
 		opts:            &o,
