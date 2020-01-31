@@ -91,11 +91,12 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	log.SetFlags(0)
 	apiKey := os.Getenv("MACKEREL_APIKEY")
-	pusher, err := mackerel.InstallNewPipeline(
+	opts := []mackerel.Option{
 		mackerel.WithAPIKey(apiKey),
 		mackerel.WithQuantiles(quantiles),
 		mackerel.WithHints(hints),
-	)
+	}
+	pusher, err := mackerel.InstallNewPipeline(opts...)
 	if err != nil {
 		log.Fatal(err)
 	}

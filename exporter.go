@@ -57,7 +57,7 @@ type options struct {
 }
 
 // WithAPIKey sets the Mackerel API Key.
-func WithAPIKey(apiKey string) func(o *options) {
+func WithAPIKey(apiKey string) Option {
 	return func(o *options) {
 		o.APIKey = apiKey
 	}
@@ -65,7 +65,7 @@ func WithAPIKey(apiKey string) func(o *options) {
 
 // WithQuantiles sets quantiles for recording measure metrics.
 // Each quantiles must be unique and its precision must be greater or equal than 0.01.
-func WithQuantiles(quantiles []float64) func(o *options) {
+func WithQuantiles(quantiles []float64) Option {
 	for _, q := range quantiles {
 		if q < 0.0 || q > 1.0 {
 			panic(aggregator.ErrInvalidQuantile)
@@ -77,14 +77,14 @@ func WithQuantiles(quantiles []float64) func(o *options) {
 }
 
 // WithHints sets hints for decision the name of the Graph Definition.
-func WithHints(hints []string) func(o *options) {
+func WithHints(hints []string) Option {
 	return func(o *options) {
 		o.Hints = hints
 	}
 }
 
 // WithBaseURL sets base URL for Mackerel API.
-func WithBaseURL(baseURL *url.URL) func(o *options) {
+func WithBaseURL(baseURL *url.URL) Option {
 	return func(o *options) {
 		o.BaseURL = baseURL
 	}
