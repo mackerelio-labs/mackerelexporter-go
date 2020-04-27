@@ -6,20 +6,20 @@ import (
 
 	"github.com/mackerelio/mackerel-client-go"
 	"go.opentelemetry.io/otel/api/core"
-	export "go.opentelemetry.io/otel/sdk/export/metric"
+	"go.opentelemetry.io/otel/api/metric"
 )
 
 func TestNew(t *testing.T) {
 	tests := []struct {
 		desc string
-		kind export.MetricKind
+		kind metric.Kind
 		name string
 		opts Options
 		want *mackerel.GraphDefsParam
 	}{
 		{
 			desc: "simple_counter",
-			kind: export.CounterKind,
+			kind: metric.CounterKind,
 			name: "custom.ether0.txBytes",
 			opts: Options{},
 			want: &mackerel.GraphDefsParam{
@@ -36,7 +36,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			desc: "counter_with_options",
-			kind: export.CounterKind,
+			kind: metric.CounterKind,
 			name: "custom.ether0.txBytes",
 			opts: Options{
 				Name: "custom.#",
@@ -56,7 +56,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			desc: "simple_measure",
-			kind: export.MeasureKind,
+			kind: metric.MeasureKind,
 			name: "custom.http.latency",
 			opts: Options{},
 			want: &mackerel.GraphDefsParam{
@@ -73,7 +73,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			desc: "multiple_wildcard",
-			kind: export.MeasureKind,
+			kind: metric.MeasureKind,
 			name: "custom.http.index.latency",
 			opts: Options{
 				Name: "custom.http.#.*",

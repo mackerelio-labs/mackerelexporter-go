@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -38,54 +37,37 @@ var (
 
 	quantiles = []float64{0.99, 0.90, 0.85}
 
-	meter    = global.MeterProvider().Meter("example/ping")
-	gcCount  = meter.NewInt64Counter("runtime.gc.count", metric.WithKeys(keys...))
-	memAlloc = meter.NewInt64Gauge("runtime.memory.alloc", metric.WithKeys(keys...))
-	latency  = meter.NewFloat64Measure("http.handlers.index.latency", metric.WithKeys(keys...))
+	meter     = global.MeterProvider().Meter("example/ping")
+	meterMust = metric.Must(meter)
+	memAlloc  = meterMust.RegisterInt64Observer("runtime.memory.alloc", func(result metric.Int64ObserverResult) {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		result.Observe(int64(m.Alloc), labels...)
+	}, metric.WithKeys(keys...))
+	latency = meterMust.NewFloat64Measure("http.handlers.index.latency", metric.WithKeys(keys...))
 
-	labels = meter.Labels(
+	labels = []core.KeyValue{
 		keyHostID.String("10-1-2-241"),
 		keyHostName.String("localhost"),
 		keyServiceNS.String("example"),
 		keyServiceName.String("ping"),
-	)
+	}
 
-	requestCount = meter.NewInt64Counter("http.requests.count", metric.WithKeys(keys...))
+	requestCount = meterMust.NewInt64Counter("http.requests.count", metric.WithKeys(keys...))
 
-	serviceLabels = meter.Labels(
+	serviceLabels = []core.KeyValue{
 		keyServiceNS.String("example"),
 		keyServiceName.String("ping"),
-	)
+	}
 )
-
-func startStats(ctx context.Context) {
-	var last uint32
-	go func() {
-		tick := time.NewTicker(10 * time.Second)
-		defer tick.Stop()
-		for {
-			select {
-			case <-tick.C:
-				var m runtime.MemStats
-				runtime.ReadMemStats(&m)
-				alloc := memAlloc.Measurement(int64(m.Alloc))
-				gc := gcCount.Measurement(int64(m.NumGC - last))
-				meter.RecordBatch(ctx, labels, alloc, gc)
-				last = m.NumGC
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-}
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	t0 := time.Now()
 	fmt.Fprintf(w, "OK\n")
 
-	latency.Record(ctx, time.Since(t0).Seconds(), labels)
-	requestCount.Add(ctx, 1, serviceLabels)
+	latency.Record(ctx, time.Since(t0).Seconds(), labels...)
+	requestCount.Add(ctx, 1, serviceLabels...)
 }
 
 func main() {
@@ -102,7 +84,6 @@ func main() {
 	}
 	defer pusher.Stop()
 
-	startStats(context.Background())
 	http.HandleFunc("/", indexHandler)
 	http.ListenAndServe(":8080", nil)
 }

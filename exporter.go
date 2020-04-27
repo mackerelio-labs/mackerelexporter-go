@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/otel/api/global"
 	export "go.opentelemetry.io/otel/sdk/export/metric"
 	"go.opentelemetry.io/otel/sdk/export/metric/aggregator"
-	metricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/batcher/defaultkeys"
 	"go.opentelemetry.io/otel/sdk/metric/controller/push"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
@@ -40,7 +39,7 @@ func NewExportPipeline(opts ...Option) (*push.Controller, error) {
 	if err != nil {
 		return nil, err
 	}
-	batcher := defaultkeys.New(s, metricsdk.NewDefaultLabelEncoder(), false)
+	batcher := defaultkeys.New(s, export.NewDefaultLabelEncoder(), false)
 	pusher := push.New(batcher, exporter, time.Minute)
 	pusher.Start()
 	return pusher, nil
@@ -141,13 +140,13 @@ type (
 // Export exports the provide metric record to Mackerel.
 func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	var regs []*registration
-	a.ForEach(func(r export.Record) {
+	a.ForEach(func(r export.Record) error {
 		reg, err := e.convertToRegistration(r)
 		if err != nil {
-			// TODO(lufia): output logs
-			return
+			return err
 		}
 		regs = append(regs, reg)
+		return nil
 	})
 
 	var (
@@ -252,7 +251,7 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	kind := desc.NumberKind()
 
 	var res resource.Resource
-	labels := r.Labels().Ordered()
+	labels := orderedLabels(r.Labels())
 	if err := resource.UnmarshalLabels(labels, &res); err != nil {
 		return nil, err
 	}
@@ -280,6 +279,15 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	reg.graphDef = g
 
 	return &reg, nil
+}
+
+func orderedLabels(labels export.Labels) []core.KeyValue {
+	var a []core.KeyValue
+	iter := labels.Iter()
+	for iter.Next() {
+		a = append(a, iter.Label())
+	}
+	return a
 }
 
 func (e *Exporter) lookupHint(name string) string {
@@ -312,7 +320,7 @@ func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.N
 			a = append(a, metricValue(metric.Join(name, qname), q.AsInterface(kind)))
 		}
 	} else if p, ok := aggr.(aggregator.LastValue); ok {
-		// export.GaugeKind: LastValue
+		// export.ObserverKind: LastValue
 		if last, _, err := p.LastValue(); err == nil {
 			a = append(a, metricValue(name, last.AsInterface(kind)))
 		}
