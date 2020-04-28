@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/api/core"
+	"go.opentelemetry.io/otel/api/metric"
 	"go.opentelemetry.io/otel/api/unit"
-	export "go.opentelemetry.io/otel/sdk/export/metric"
 
-	"github.com/lufia/mackerelexporter-go/internal/metric"
+	metricname "github.com/lufia/mackerelexporter-go/internal/metric"
 	"github.com/mackerelio/mackerel-client-go"
 )
 
@@ -29,18 +29,18 @@ type Options struct {
 var errMismatch = errors.New("mismatched metric names")
 
 // New returns Mackerel's Graph Definition. Each names in arguments must be canonicalized.
-func New(name string, kind export.MetricKind, opts Options) (*mackerel.GraphDefsParam, error) {
+func New(name string, kind metric.Kind, opts Options) (*mackerel.GraphDefsParam, error) {
 	if opts.Unit == "" {
 		opts.Unit = unitDimensionless
 	}
-	if kind == export.MeasureKind {
-		name = metric.Join(name, "max") // Anything is fine
+	if kind == metric.MeasureKind {
+		name = metricname.Join(name, "max") // Anything is fine
 	}
 	if opts.Name == "" {
-		opts.Name = metric.Prefix(name)
+		opts.Name = metricname.Prefix(name)
 	}
-	r := metric.Join(opts.Name, "*")
-	if !metric.Match(name, r) {
+	r := metricname.Join(opts.Name, "*")
+	if !metricname.Match(name, r) {
 		return nil, errMismatch
 	}
 	return &mackerel.GraphDefsParam{
@@ -54,7 +54,7 @@ func New(name string, kind export.MetricKind, opts Options) (*mackerel.GraphDefs
 }
 
 func metricDisplayName(name string) string {
-	a := metric.Split(name)
+	a := metricname.Split(name)
 	if len(a) == 0 {
 		return ""
 	}
