@@ -17,7 +17,7 @@ import (
 
 	"github.com/lufia/mackerelexporter-go/internal/graphdef"
 	"github.com/lufia/mackerelexporter-go/internal/metricname"
-	"github.com/lufia/mackerelexporter-go/internal/resource"
+	"github.com/lufia/mackerelexporter-go/internal/tag"
 	"github.com/mackerelio/mackerel-client-go"
 )
 
@@ -128,7 +128,7 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 
 type (
 	registration struct {
-		res      *resource.Resource
+		res      *tag.Resource
 		graphDef *mackerel.GraphDefsParam
 		metrics  []*mackerel.MetricValue
 	}
@@ -222,7 +222,7 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	return nil
 }
 
-func metricType(res *resource.Resource) interface{} {
+func metricType(res *tag.Resource) interface{} {
 	if s := res.CustomIdentifier(); s != "" {
 		return customIdentifier(s)
 	}
@@ -250,9 +250,9 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	desc := r.Descriptor()
 	kind := desc.NumberKind()
 
-	var res resource.Resource
+	var res tag.Resource
 	labels := orderedLabels(r.Labels())
-	if err := resource.UnmarshalLabels(labels, &res); err != nil {
+	if err := tag.UnmarshalTags(labels, &res); err != nil {
 		return nil, err
 	}
 	reg.res = &res
