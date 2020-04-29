@@ -61,6 +61,7 @@ type options struct {
 	Hints     []string
 	BaseURL   *url.URL
 	Tags      []core.KeyValue
+	Debug     bool
 }
 
 // WithAPIKey sets the Mackerel API Key.
@@ -104,6 +105,13 @@ func WithResource(tags ...core.KeyValue) Option {
 	}
 }
 
+// WithDebug enables logs for debugging.
+func WithDebug() Option {
+	return func(o *options) {
+		o.Debug = true
+	}
+}
+
 // Exporter is a stats exporter that uploads data to Mackerel.
 type Exporter struct {
 	c    *mackerel.Client
@@ -131,6 +139,7 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 	if o.BaseURL != nil {
 		c.BaseURL = o.BaseURL
 	}
+	c.Verbose = o.Debug
 	return &Exporter{
 		c:               c,
 		opts:            &o,

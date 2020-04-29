@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -58,13 +59,21 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	requestCount.Add(ctx, 1, serviceLabels...)
 }
 
+var (
+	flagDebug = flag.Bool("debug", false, "enables logs for debugging")
+)
+
 func main() {
 	log.SetFlags(0)
+	flag.Parse()
 	apiKey := os.Getenv("MACKEREL_APIKEY")
 	opts := []mackerel.Option{
 		mackerel.WithAPIKey(apiKey),
 		mackerel.WithQuantiles(quantiles),
 		mackerel.WithHints(hints),
+	}
+	if *flagDebug {
+		opts = append(opts, mackerel.WithDebug())
 	}
 	pusher, err := mackerel.InstallNewPipeline(opts...)
 	if err != nil {
