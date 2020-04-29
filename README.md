@@ -2,7 +2,7 @@
 
 This is OpenTelemetry Meter Exporter for [Mackerel](https://mackerel.io/).
 
-[![GoDoc][godoc-image]][godoc-url]
+[![GoDev][godev-image]][godev-url]
 [![Actions Status][actions-image]][actions-url]
 
 ## Installation
@@ -101,7 +101,7 @@ func main() {
 }
 ```
 
-[godoc-image]: https://godoc.org/github.com/lufia/mackerelexporter-go?status.svg
-[godoc-url]: https://godoc.org/github.com/lufia/mackerelexporter-go
+[godev-image]: https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square
+[godev-url]: https://pkg.go.dev/github.com/lufia/mackerelexporter-go
 [actions-image]: https://github.com/lufia/mackerelexporter-go/workflows/ci/badge.svg
 [actions-url]: https://github.com/lufia/mackerelexporter-go/actions
