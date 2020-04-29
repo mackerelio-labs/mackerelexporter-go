@@ -11,9 +11,10 @@ import (
 	"go.opentelemetry.io/otel/api/global"
 	export "go.opentelemetry.io/otel/sdk/export/metric"
 	"go.opentelemetry.io/otel/sdk/export/metric/aggregator"
-	"go.opentelemetry.io/otel/sdk/metric/batcher/defaultkeys"
+	"go.opentelemetry.io/otel/sdk/metric/batcher/ungrouped"
 	"go.opentelemetry.io/otel/sdk/metric/controller/push"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
+	"go.opentelemetry.io/otel/sdk/resource"
 
 	"github.com/lufia/mackerelexporter-go/internal/graphdef"
 	"github.com/lufia/mackerelexporter-go/internal/metricname"
@@ -39,8 +40,14 @@ func NewExportPipeline(opts ...Option) (*push.Controller, error) {
 	if err != nil {
 		return nil, err
 	}
-	batcher := defaultkeys.New(s, export.NewDefaultLabelEncoder(), false)
-	pusher := push.New(batcher, exporter, time.Minute)
+	var o []push.Option
+	if len(exporter.opts.Tags) > 0 {
+		res := resource.New(exporter.opts.Tags...)
+		o = append(o, push.WithResource(res))
+	}
+
+	batcher := ungrouped.New(s, false)
+	pusher := push.New(batcher, exporter, time.Minute, o...)
 	pusher.Start()
 	return pusher, nil
 }
@@ -53,6 +60,7 @@ type options struct {
 	Quantiles []float64
 	Hints     []string
 	BaseURL   *url.URL
+	Tags      []core.KeyValue
 }
 
 // WithAPIKey sets the Mackerel API Key.
@@ -86,6 +94,13 @@ func WithHints(hints []string) Option {
 func WithBaseURL(baseURL *url.URL) Option {
 	return func(o *options) {
 		o.BaseURL = baseURL
+	}
+}
+
+// WithResource sets resource tags.
+func WithResource(tags ...core.KeyValue) Option {
+	return func(o *options) {
+		o.Tags = tags
 	}
 }
 
@@ -138,10 +153,10 @@ type (
 )
 
 // Export exports the provide metric record to Mackerel.
-func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
+func (e *Exporter) Export(ctx context.Context, res *resource.Resource, a export.CheckpointSet) error {
 	var regs []*registration
 	a.ForEach(func(r export.Record) error {
-		reg, err := e.convertToRegistration(r)
+		reg, err := e.convertToRegistration(r, res)
 		if err != nil {
 			return err
 		}
@@ -245,17 +260,17 @@ func (e *Exporter) mergeGraphDefs(defs map[string]*mackerel.GraphDefsParam) {
 	}
 }
 
-func (e *Exporter) convertToRegistration(r export.Record) (*registration, error) {
+func (e *Exporter) convertToRegistration(r export.Record, res *resource.Resource) (*registration, error) {
 	var reg registration
 	desc := r.Descriptor()
 	kind := desc.NumberKind()
 
-	var res tag.Resource
-	labels := orderedLabels(r.Labels())
-	if err := tag.UnmarshalTags(labels, &res); err != nil {
+	var t tag.Resource
+	labels := append(r.Labels().ToSlice(), res.Attributes()...)
+	if err := tag.UnmarshalTags(labels, &t); err != nil {
 		return nil, err
 	}
-	reg.res = &res
+	reg.res = &t
 
 	// TODO(lufia): Enforce the metric to be the custom metric if hint is exist
 	name := metricname.Canonical(desc.Name())
@@ -279,15 +294,6 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	reg.graphDef = g
 
 	return &reg, nil
-}
-
-func orderedLabels(labels export.Labels) []core.KeyValue {
-	var a []core.KeyValue
-	iter := labels.Iter()
-	for iter.Next() {
-		a = append(a, iter.Label())
-	}
-	return a
 }
 
 func (e *Exporter) lookupHint(name string) string {

@@ -7,21 +7,23 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/api/core"
+	"go.opentelemetry.io/otel/sdk/resource/resourcekeys"
 )
 
 const (
 	resourceNameSep = "."
 )
 
+// These keys are handled for creating hosts, graph-defs, or metrics.
 var (
-	// see https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/data-resource-semantic-conventions.md
-	keyServiceNS         = core.Key("service.namespace")
-	keyServiceName       = core.Key("service.name")
-	keyServiceInstanceID = core.Key("service.instance.id")
-	keyServiceVersion    = core.Key("service.version")
-	keyHostID            = core.Key("host.id")
-	keyHostName          = core.Key("host.name")
-	keyCloudProvider     = core.Key("cloud.provider")
+	// see https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/resource/semantic_conventions/README.md
+	keyServiceNS         = core.Key(resourcekeys.ServiceKeyNamespace)
+	keyServiceName       = core.Key(resourcekeys.ServiceKeyName)
+	keyServiceInstanceID = core.Key(resourcekeys.ServiceKeyInstanceID)
+	keyServiceVersion    = core.Key(resourcekeys.ServiceKeyVersion)
+	keyHostID            = core.Key(resourcekeys.HostKeyID)
+	keyHostName          = core.Key(resourcekeys.HostKeyName)
+	keyCloudProvider     = core.Key(resourcekeys.CloudKeyProvider)
 )
 
 // Resource represents a resource constructed with labels.
