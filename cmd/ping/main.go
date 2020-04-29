@@ -10,7 +10,6 @@ import (
 
 	"go.opentelemetry.io/otel/api/core"
 	"go.opentelemetry.io/otel/api/global"
-	"go.opentelemetry.io/otel/api/key"
 	"go.opentelemetry.io/otel/api/metric"
 	"go.opentelemetry.io/otel/api/unit"
 
@@ -20,11 +19,6 @@ import (
 // https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/example_test.go
 
 var (
-	keyHostID      = key.New("host.id")           // custom identifier
-	keyHostName    = key.New("host.name")         // hostname
-	keyServiceNS   = key.New("service.namespace") // service
-	keyServiceName = key.New("service.name")      // role
-
 	hints = []string{
 		"http.handlers.#.latency",
 	}
@@ -41,17 +35,17 @@ var (
 	latency = meterMust.NewFloat64Measure("http.handlers.index.latency")
 
 	labels = []core.KeyValue{
-		keyHostID.String("10-1-2-241"),
-		keyHostName.String("localhost"),
-		keyServiceNS.String("example"),
-		keyServiceName.String("ping"),
+		mackerel.KeyHostID.String("10-1-2-241"),
+		mackerel.KeyHostName.String("localhost"),
+		mackerel.KeyServiceNS.String("example"),
+		mackerel.KeyServiceName.String("ping"),
 	}
 
 	requestCount = meterMust.NewInt64Counter("http.requests.count")
 
 	serviceLabels = []core.KeyValue{
-		keyServiceNS.String("example"),
-		keyServiceName.String("ping"),
+		mackerel.KeyServiceNS.String("example"),
+		mackerel.KeyServiceName.String("ping"),
 	}
 )
 
