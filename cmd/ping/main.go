@@ -31,15 +31,13 @@ var (
 	memAlloc  = meterMust.RegisterInt64Observer("runtime.memory.alloc", func(result metric.Int64ObserverResult) {
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
-		result.Observe(int64(m.Alloc), labels...)
+		result.Observe(int64(m.Alloc), hostLabels...)
 	}, metric.WithUnit(unit.Bytes))
 	latency = meterMust.NewFloat64Measure("http.handlers.index.latency")
 
-	labels = []core.KeyValue{
+	hostLabels = []core.KeyValue{
 		mackerel.KeyHostID.String("10-1-2-241"),
 		mackerel.KeyHostName.String("localhost"),
-		mackerel.KeyServiceNS.String("example"),
-		mackerel.KeyServiceName.String("ping"),
 	}
 
 	requestCount = meterMust.NewInt64Counter("http.requests.count")
@@ -55,8 +53,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	t0 := time.Now()
 	fmt.Fprintf(w, "OK\n")
 
-	latency.Record(ctx, time.Since(t0).Seconds(), labels...)
-	requestCount.Add(ctx, 1, serviceLabels...)
+	latency.Record(ctx, time.Since(t0).Seconds(), hostLabels...)
+	requestCount.Add(ctx, 1)
 }
 
 var (
@@ -71,6 +69,7 @@ func main() {
 		mackerel.WithAPIKey(apiKey),
 		mackerel.WithQuantiles(quantiles),
 		mackerel.WithHints(hints),
+		mackerel.WithResource(serviceLabels...),
 	}
 	if *flagDebug {
 		opts = append(opts, mackerel.WithDebug())
