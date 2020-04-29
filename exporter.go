@@ -3,6 +3,7 @@ package mackerel
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -23,22 +24,22 @@ import (
 )
 
 // InstallNewPipeline instantiates a NewExportPipeline and registers it globally.
-func InstallNewPipeline(opts ...Option) (*push.Controller, error) {
-	pusher, err := NewExportPipeline(opts...)
+func InstallNewPipeline(opts ...Option) (*push.Controller, http.HandlerFunc, error) {
+	pusher, handler, err := NewExportPipeline(opts...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	global.SetMeterProvider(pusher)
-	return pusher, err
+	return pusher, handler, err
 }
 
 // NewExportPipeline sets up a complete export pipeline.
-func NewExportPipeline(opts ...Option) (*push.Controller, error) {
+func NewExportPipeline(opts ...Option) (*push.Controller, http.HandlerFunc, error) {
 	// There are few types in simple; inexpensive, sketch, exact.
 	s := simple.NewWithExactMeasure()
 	exporter, err := NewExporter(opts...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var o []push.Option
 	if len(exporter.opts.Tags) > 0 {
@@ -49,7 +50,11 @@ func NewExportPipeline(opts ...Option) (*push.Controller, error) {
 	batcher := ungrouped.New(s, false)
 	pusher := push.New(batcher, exporter, time.Minute, o...)
 	pusher.Start()
-	return pusher, nil
+
+	if h, _ := exporter.c.(http.Handler); h != nil {
+		return pusher, h.ServeHTTP, nil
+	}
+	return pusher, nil, nil
 }
 
 // Option is function type that is passed to NewExporter function.
@@ -112,9 +117,24 @@ func WithDebug() Option {
 	}
 }
 
+type mackerelClient interface {
+	FindServices() ([]*mackerel.Service, error)
+	CreateService(param *mackerel.CreateServiceParam) (*mackerel.Service, error)
+	FindRoles(serviceName string) ([]*mackerel.Role, error)
+	CreateRole(serviceName string, param *mackerel.CreateRoleParam) (*mackerel.Role, error)
+
+	FindHosts(param *mackerel.FindHostsParam) ([]*mackerel.Host, error)
+	CreateHost(param *mackerel.CreateHostParam) (string, error)
+	UpdateHost(hostID string, param *mackerel.UpdateHostParam) (string, error)
+
+	CreateGraphDefs(defs []*mackerel.GraphDefsParam) error
+	PostHostMetricValues(metrics []*mackerel.HostMetricValue) error
+	PostServiceMetricValues(name string, metrics []*mackerel.MetricValue) error
+}
+
 // Exporter is a stats exporter that uploads data to Mackerel.
 type Exporter struct {
-	c    *mackerel.Client
+	c    mackerelClient
 	opts *options
 
 	hosts           map[string]string // value is Mackerel's host ID
@@ -135,11 +155,15 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 		// This values equal to stdout exporter's values
 		o.Quantiles = []float64{0.5, 0.9, 0.99}
 	}
-	c := mackerel.NewClient(o.APIKey)
-	if o.BaseURL != nil {
-		c.BaseURL = o.BaseURL
+	var c mackerelClient = &handlerClient{}
+	if o.APIKey != "" {
+		p := mackerel.NewClient(o.APIKey)
+		if o.BaseURL != nil {
+			p.BaseURL = o.BaseURL
+		}
+		p.Verbose = o.Debug
+		c = p
 	}
-	c.Verbose = o.Debug
 	return &Exporter{
 		c:               c,
 		opts:            &o,
@@ -354,4 +378,9 @@ func metricValue(name string, v interface{}) *mackerel.MetricValue {
 		Time:  time.Now().Unix(),
 		Value: v,
 	}
+}
+
+func (e *Exporter) Handler() http.Handler {
+	h, _ := e.c.(http.Handler)
+	return h
 }

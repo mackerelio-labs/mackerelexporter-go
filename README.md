@@ -48,6 +48,10 @@ The hint is the name composed by deleted only the end of the metric name, and it
 
 Special case. The exporter will append *.min*, *.max* and *.percentile_xx* implicitly to the end of the name for *measure* metric in OpenTelemetry. Thus count of elements of the hint will be same as the recorded metric name.
 
+## The push/pull mode
+
+If you give *InstallNewPipeline* a valid API key with *WithAPIKey* option, the exporter runs as the push mode. In this mode, the exporter sends host- and service-metrics to Mackerl automatically. Otherwise the exporter runs as the pull mode. The pull mode dont' send any metrics. Instead, *InstallNewPipeline* returns a handler function for *net/http*. In pull mode, the handler function responds host metrics to the HTTP client, and it don't include any service metrics.
+
 ## Example
 
 ```go
