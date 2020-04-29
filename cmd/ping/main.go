@@ -74,12 +74,15 @@ func main() {
 	if *flagDebug {
 		opts = append(opts, mackerel.WithDebug())
 	}
-	pusher, err := mackerel.InstallNewPipeline(opts...)
+	pusher, handler, err := mackerel.InstallNewPipeline(opts...)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer pusher.Stop()
 
 	http.HandleFunc("/", indexHandler)
+	if handler != nil {
+		http.HandleFunc("/metrics", handler)
+	}
 	http.ListenAndServe(":8080", nil)
 }
