@@ -1,4 +1,4 @@
-package resource
+package tag
 
 import (
 	"reflect"
@@ -7,7 +7,7 @@ import (
 	"go.opentelemetry.io/otel/api/core"
 )
 
-func TestUnmarshalLabels(t *testing.T) {
+func TestUnmarshalTags(t *testing.T) {
 	want := Resource{
 		Service: Service{
 			Name:     "name",
@@ -23,7 +23,7 @@ func TestUnmarshalLabels(t *testing.T) {
 		core.Key("service.version").String(want.Service.Version),
 	}
 	var m Resource
-	if err := UnmarshalLabels(labels, &m); err != nil {
+	if err := UnmarshalTags(labels, &m); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(m, want) {
@@ -31,7 +31,7 @@ func TestUnmarshalLabels(t *testing.T) {
 	}
 }
 
-func TestUnmarshalLabelsInterface(t *testing.T) {
+func TestUnmarshalTagsInterface(t *testing.T) {
 	want := Resource{
 		Service: Service{
 			Name:     "name",
@@ -47,7 +47,7 @@ func TestUnmarshalLabelsInterface(t *testing.T) {
 		core.Key("service.version").String(want.Service.Version),
 	}
 	var v interface{}
-	if err := UnmarshalLabels(labels, &v); err != nil {
+	if err := UnmarshalTags(labels, &v); err != nil {
 		t.Fatal(err)
 	}
 	if s, ok := lookupInterfaceMap(v, "service", "name").(string); !ok || s != want.Service.Name {

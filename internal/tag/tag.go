@@ -1,4 +1,4 @@
-package resource
+package tag
 
 import (
 	"fmt"
@@ -7,21 +7,23 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/api/core"
+	"go.opentelemetry.io/otel/sdk/resource/resourcekeys"
 )
 
 const (
 	resourceNameSep = "."
 )
 
+// These keys are handled for creating hosts, graph-defs, or metrics.
 var (
-	// see https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/data-resource-semantic-conventions.md
-	keyServiceNS         = core.Key("service.namespace")
-	keyServiceName       = core.Key("service.name")
-	keyServiceInstanceID = core.Key("service.instance.id")
-	keyServiceVersion    = core.Key("service.version")
-	keyHostID            = core.Key("host.id")
-	keyHostName          = core.Key("host.name")
-	keyCloudProvider     = core.Key("cloud.provider")
+	// see https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/resource/semantic_conventions/README.md
+	keyServiceNS         = core.Key(resourcekeys.ServiceKeyNamespace)
+	keyServiceName       = core.Key(resourcekeys.ServiceKeyName)
+	keyServiceInstanceID = core.Key(resourcekeys.ServiceKeyInstanceID)
+	keyServiceVersion    = core.Key(resourcekeys.ServiceKeyVersion)
+	keyHostID            = core.Key(resourcekeys.HostKeyID)
+	keyHostName          = core.Key(resourcekeys.HostKeyName)
+	keyCloudProvider     = core.Key(resourcekeys.CloudKeyProvider)
 )
 
 // Resource represents a resource constructed with labels.
@@ -112,16 +114,16 @@ func (r *Resource) RoleFullname() string {
 	return r.Service.NS + ":" + r.Service.Name
 }
 
-// UnmarshalLabels parses labels and store the result into v.
-func UnmarshalLabels(labels []core.KeyValue, v interface{}) error {
+// UnmarshalTags parses labels and store the result into v.
+func UnmarshalTags(tags []core.KeyValue, v interface{}) error {
 	p := reflect.ValueOf(v)
-	for _, kv := range labels {
-		if !kv.Key.Defined() {
+	for _, tag := range tags {
+		if !tag.Key.Defined() {
 			continue
 		}
-		name := string(kv.Key)
+		name := string(tag.Key)
 		keys := strings.Split(name, resourceNameSep)
-		if err := unmarshalLabels("<v>", keys, kv.Value, p); err != nil {
+		if err := unmarshalTags("<v>", keys, tag.Value, p); err != nil {
 			return fmt.Errorf("cannot assign %s: %w", name, err)
 		}
 	}
@@ -129,10 +131,10 @@ func UnmarshalLabels(labels []core.KeyValue, v interface{}) error {
 }
 
 // name must mean v
-func unmarshalLabels(name string, keys []string, value core.Value, v reflect.Value) error {
+func unmarshalTags(name string, keys []string, value core.Value, v reflect.Value) error {
 	switch kind := v.Type().Kind(); kind {
 	case reflect.Ptr:
-		return unmarshalLabels(name, keys, value, reflect.Indirect(v))
+		return unmarshalTags(name, keys, value, reflect.Indirect(v))
 	case reflect.Struct:
 		if len(keys) == 0 {
 			return fmt.Errorf("%s is %v", name, kind)
@@ -142,12 +144,12 @@ func unmarshalLabels(name string, keys []string, value core.Value, v reflect.Val
 		if !ok {
 			return nil // ignore this field
 		}
-		return unmarshalLabels(keys[0], keys[1:], value, f)
+		return unmarshalTags(keys[0], keys[1:], value, f)
 	case reflect.Interface:
 		if v.IsNil() {
 			v.Set(reflect.ValueOf(map[string]interface{}{}))
 		}
-		return unmarshalLabels(name, keys, value, v.Elem())
+		return unmarshalTags(name, keys, value, v.Elem())
 	case reflect.Map:
 		if len(keys) == 0 {
 			return fmt.Errorf("%s is %v", name, kind)
@@ -162,7 +164,7 @@ func unmarshalLabels(name string, keys []string, value core.Value, v reflect.Val
 			p = reflect.ValueOf(map[string]interface{}{})
 			v.SetMapIndex(key, p)
 		}
-		if err := unmarshalLabels(keys[0], keys[1:], value, p); err != nil {
+		if err := unmarshalTags(keys[0], keys[1:], value, p); err != nil {
 			return err
 		}
 		return nil

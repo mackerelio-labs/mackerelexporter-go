@@ -1,6 +1,6 @@
 // +build windows
 
-package metric
+package metricname
 
 // see https://mackerel.io/docs/entry/spec/metrics
 var systemMetrics = []string{

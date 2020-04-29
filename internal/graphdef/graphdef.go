@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/api/metric"
 	"go.opentelemetry.io/otel/api/unit"
 
-	metricname "github.com/lufia/mackerelexporter-go/internal/metric"
+	"github.com/lufia/mackerelexporter-go/internal/metricname"
 	"github.com/mackerelio/mackerel-client-go"
 )
 

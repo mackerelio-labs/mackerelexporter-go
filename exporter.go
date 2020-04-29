@@ -11,13 +11,14 @@ import (
 	"go.opentelemetry.io/otel/api/global"
 	export "go.opentelemetry.io/otel/sdk/export/metric"
 	"go.opentelemetry.io/otel/sdk/export/metric/aggregator"
-	"go.opentelemetry.io/otel/sdk/metric/batcher/defaultkeys"
+	"go.opentelemetry.io/otel/sdk/metric/batcher/ungrouped"
 	"go.opentelemetry.io/otel/sdk/metric/controller/push"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
+	"go.opentelemetry.io/otel/sdk/resource"
 
 	"github.com/lufia/mackerelexporter-go/internal/graphdef"
-	"github.com/lufia/mackerelexporter-go/internal/metric"
-	"github.com/lufia/mackerelexporter-go/internal/resource"
+	"github.com/lufia/mackerelexporter-go/internal/metricname"
+	"github.com/lufia/mackerelexporter-go/internal/tag"
 	"github.com/mackerelio/mackerel-client-go"
 )
 
@@ -39,8 +40,14 @@ func NewExportPipeline(opts ...Option) (*push.Controller, error) {
 	if err != nil {
 		return nil, err
 	}
-	batcher := defaultkeys.New(s, export.NewDefaultLabelEncoder(), false)
-	pusher := push.New(batcher, exporter, time.Minute)
+	var o []push.Option
+	if len(exporter.opts.Tags) > 0 {
+		res := resource.New(exporter.opts.Tags...)
+		o = append(o, push.WithResource(res))
+	}
+
+	batcher := ungrouped.New(s, false)
+	pusher := push.New(batcher, exporter, time.Minute, o...)
 	pusher.Start()
 	return pusher, nil
 }
@@ -53,6 +60,7 @@ type options struct {
 	Quantiles []float64
 	Hints     []string
 	BaseURL   *url.URL
+	Tags      []core.KeyValue
 }
 
 // WithAPIKey sets the Mackerel API Key.
@@ -86,6 +94,13 @@ func WithHints(hints []string) Option {
 func WithBaseURL(baseURL *url.URL) Option {
 	return func(o *options) {
 		o.BaseURL = baseURL
+	}
+}
+
+// WithResource sets resource tags.
+func WithResource(tags ...core.KeyValue) Option {
+	return func(o *options) {
+		o.Tags = tags
 	}
 }
 
@@ -128,7 +143,7 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 
 type (
 	registration struct {
-		res      *resource.Resource
+		res      *tag.Resource
 		graphDef *mackerel.GraphDefsParam
 		metrics  []*mackerel.MetricValue
 	}
@@ -138,10 +153,10 @@ type (
 )
 
 // Export exports the provide metric record to Mackerel.
-func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
+func (e *Exporter) Export(ctx context.Context, res *resource.Resource, a export.CheckpointSet) error {
 	var regs []*registration
 	a.ForEach(func(r export.Record) error {
-		reg, err := e.convertToRegistration(r)
+		reg, err := e.convertToRegistration(r, res)
 		if err != nil {
 			return err
 		}
@@ -222,7 +237,7 @@ func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	return nil
 }
 
-func metricType(res *resource.Resource) interface{} {
+func metricType(res *tag.Resource) interface{} {
 	if s := res.CustomIdentifier(); s != "" {
 		return customIdentifier(s)
 	}
@@ -245,20 +260,20 @@ func (e *Exporter) mergeGraphDefs(defs map[string]*mackerel.GraphDefsParam) {
 	}
 }
 
-func (e *Exporter) convertToRegistration(r export.Record) (*registration, error) {
+func (e *Exporter) convertToRegistration(r export.Record, res *resource.Resource) (*registration, error) {
 	var reg registration
 	desc := r.Descriptor()
 	kind := desc.NumberKind()
 
-	var res resource.Resource
-	labels := orderedLabels(r.Labels())
-	if err := resource.UnmarshalLabels(labels, &res); err != nil {
+	var t tag.Resource
+	labels := append(r.Labels().ToSlice(), res.Attributes()...)
+	if err := tag.UnmarshalTags(labels, &t); err != nil {
 		return nil, err
 	}
-	reg.res = &res
+	reg.res = &t
 
 	// TODO(lufia): Enforce the metric to be the custom metric if hint is exist
-	name := metric.Canonical(desc.Name())
+	name := metricname.Canonical(desc.Name())
 	hint := e.lookupHint(desc.Name())
 	aggr := r.Aggregator()
 	reg.metrics = e.metricValues(name, aggr, kind)
@@ -281,19 +296,10 @@ func (e *Exporter) convertToRegistration(r export.Record) (*registration, error)
 	return &reg, nil
 }
 
-func orderedLabels(labels export.Labels) []core.KeyValue {
-	var a []core.KeyValue
-	iter := labels.Iter()
-	for iter.Next() {
-		a = append(a, iter.Label())
-	}
-	return a
-}
-
 func (e *Exporter) lookupHint(name string) string {
 	for _, s := range e.opts.Hints {
-		if metric.Match(name, s) {
-			return metric.Canonical(s)
+		if metricname.Match(name, s) {
+			return metricname.Canonical(s)
 		}
 	}
 	return ""
@@ -306,18 +312,18 @@ func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.N
 	if p, ok := aggr.(aggregator.Distribution); ok {
 		// export.MeasureKind: MinMaxSumCount, Distribution, Points
 		if min, err := p.Min(); err == nil {
-			a = append(a, metricValue(metric.Join(name, "min"), min.AsInterface(kind)))
+			a = append(a, metricValue(metricname.Join(name, "min"), min.AsInterface(kind)))
 		}
 		if max, err := p.Max(); err == nil {
-			a = append(a, metricValue(metric.Join(name, "max"), max.AsInterface(kind)))
+			a = append(a, metricValue(metricname.Join(name, "max"), max.AsInterface(kind)))
 		}
 		for _, quantile := range e.opts.Quantiles {
 			q, err := p.Quantile(quantile)
 			if err != nil {
 				continue
 			}
-			qname := metric.Percentile(quantile)
-			a = append(a, metricValue(metric.Join(name, qname), q.AsInterface(kind)))
+			qname := metricname.Percentile(quantile)
+			a = append(a, metricValue(metricname.Join(name, qname), q.AsInterface(kind)))
 		}
 	} else if p, ok := aggr.(aggregator.LastValue); ok {
 		// export.ObserverKind: LastValue

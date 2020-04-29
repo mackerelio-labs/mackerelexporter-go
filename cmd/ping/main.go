@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/api/global"
 	"go.opentelemetry.io/otel/api/key"
 	"go.opentelemetry.io/otel/api/metric"
+	"go.opentelemetry.io/otel/api/unit"
 
 	"github.com/lufia/mackerelexporter-go"
 )
@@ -23,13 +24,6 @@ var (
 	keyHostName    = key.New("host.name")         // hostname
 	keyServiceNS   = key.New("service.namespace") // service
 	keyServiceName = key.New("service.name")      // role
-
-	keys = []core.Key{
-		keyHostID,
-		keyHostName,
-		keyServiceNS,
-		keyServiceName,
-	}
 
 	hints = []string{
 		"http.handlers.#.latency",
@@ -43,8 +37,8 @@ var (
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
 		result.Observe(int64(m.Alloc), labels...)
-	}, metric.WithKeys(keys...))
-	latency = meterMust.NewFloat64Measure("http.handlers.index.latency", metric.WithKeys(keys...))
+	}, metric.WithUnit(unit.Bytes))
+	latency = meterMust.NewFloat64Measure("http.handlers.index.latency")
 
 	labels = []core.KeyValue{
 		keyHostID.String("10-1-2-241"),
@@ -53,7 +47,7 @@ var (
 		keyServiceName.String("ping"),
 	}
 
-	requestCount = meterMust.NewInt64Counter("http.requests.count", metric.WithKeys(keys...))
+	requestCount = meterMust.NewInt64Counter("http.requests.count")
 
 	serviceLabels = []core.KeyValue{
 		keyServiceNS.String("example"),

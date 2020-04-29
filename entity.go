@@ -3,7 +3,7 @@ package mackerel
 import (
 	"errors"
 
-	"github.com/lufia/mackerelexporter-go/internal/resource"
+	"github.com/lufia/mackerelexporter-go/internal/tag"
 	"github.com/mackerelio/mackerel-client-go"
 )
 
@@ -61,7 +61,7 @@ func (e *Exporter) registerServiceRole(s, role string) error {
 }
 
 // upsertHost update or insert the host with r.
-func (e *Exporter) upsertHost(r *resource.Resource) (string, error) {
+func (e *Exporter) upsertHost(r *tag.Resource) (string, error) {
 	param := mackerel.CreateHostParam{
 		Name:             r.Hostname(),
 		CustomIdentifier: r.CustomIdentifier(),
