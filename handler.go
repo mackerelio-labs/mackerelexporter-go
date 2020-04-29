@@ -130,7 +130,7 @@ func (c *handlerClient) PostHostMetricValues(metrics []*mackerel.HostMetricValue
 }
 
 func (c *handlerClient) PostServiceMetricValues(name string, metrics []*mackerel.MetricValue) error {
-	// BUG(lufia): handler-mode don't support to post the service metrics.
+	// BUG(lufia): The pull mode don't support to post the service metrics.
 	return nil
 }
 
