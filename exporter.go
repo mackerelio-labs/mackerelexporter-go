@@ -166,6 +166,9 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 		p.Verbose = o.Debug
 		c = p
 	}
+
+	// TODO(lufia): Should I use pull.Controller?
+	// see https://github.com/open-telemetry/opentelemetry-go/pull/751
 	return &Exporter{
 		c:               c,
 		opts:            &o,
