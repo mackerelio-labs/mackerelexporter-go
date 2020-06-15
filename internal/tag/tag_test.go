@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"go.opentelemetry.io/otel/api/core"
+	"go.opentelemetry.io/otel/api/kv"
 )
 
 func TestUnmarshalTags(t *testing.T) {
@@ -16,11 +16,11 @@ func TestUnmarshalTags(t *testing.T) {
 			Version:  "a:1.1",
 		},
 	}
-	labels := []core.KeyValue{
-		core.Key("service.name").String(want.Service.Name),
-		core.Key("service.namespace").String(want.Service.NS),
-		core.Key("service.instance.id").String(want.Service.Instance.ID),
-		core.Key("service.version").String(want.Service.Version),
+	labels := []kv.KeyValue{
+		kv.Key("service.name").String(want.Service.Name),
+		kv.Key("service.namespace").String(want.Service.NS),
+		kv.Key("service.instance.id").String(want.Service.Instance.ID),
+		kv.Key("service.version").String(want.Service.Version),
 	}
 	var m Resource
 	if err := UnmarshalTags(labels, &m); err != nil {
@@ -40,11 +40,11 @@ func TestUnmarshalTagsInterface(t *testing.T) {
 			Version:  "a:1.1",
 		},
 	}
-	labels := []core.KeyValue{
-		core.Key("service.name").String(want.Service.Name),
-		core.Key("service.namespace").String(want.Service.NS),
-		core.Key("service.instance.id").String(want.Service.Instance.ID),
-		core.Key("service.version").String(want.Service.Version),
+	labels := []kv.KeyValue{
+		kv.Key("service.name").String(want.Service.Name),
+		kv.Key("service.namespace").String(want.Service.NS),
+		kv.Key("service.instance.id").String(want.Service.Instance.ID),
+		kv.Key("service.version").String(want.Service.Version),
 	}
 	var v interface{}
 	if err := UnmarshalTags(labels, &v); err != nil {

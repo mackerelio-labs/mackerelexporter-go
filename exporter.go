@@ -8,12 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/otel/api/core"
 	"go.opentelemetry.io/otel/api/global"
+	"go.opentelemetry.io/otel/api/kv"
+	"go.opentelemetry.io/otel/api/metric"
 	export "go.opentelemetry.io/otel/sdk/export/metric"
 	"go.opentelemetry.io/otel/sdk/export/metric/aggregator"
-	"go.opentelemetry.io/otel/sdk/metric/batcher/ungrouped"
 	"go.opentelemetry.io/otel/sdk/metric/controller/push"
+	integrator "go.opentelemetry.io/otel/sdk/metric/integrator/simple"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/resource"
 
@@ -29,26 +30,27 @@ func InstallNewPipeline(opts ...Option) (*push.Controller, http.HandlerFunc, err
 	if err != nil {
 		return nil, nil, err
 	}
-	global.SetMeterProvider(pusher)
+	global.SetMeterProvider(pusher.Provider())
 	return pusher, handler, err
 }
 
 // NewExportPipeline sets up a complete export pipeline.
 func NewExportPipeline(opts ...Option) (*push.Controller, http.HandlerFunc, error) {
 	// There are few types in simple; inexpensive, sketch, exact.
-	s := simple.NewWithExactMeasure()
+	s := simple.NewWithExactDistribution()
 	exporter, err := NewExporter(opts...)
 	if err != nil {
 		return nil, nil, err
 	}
 	var o []push.Option
+	o = append(o, push.WithPeriod(time.Minute))
 	if len(exporter.opts.Tags) > 0 {
 		res := resource.New(exporter.opts.Tags...)
 		o = append(o, push.WithResource(res))
 	}
 
-	batcher := ungrouped.New(s, false)
-	pusher := push.New(batcher, exporter, time.Minute, o...)
+	p := integrator.New(s, false)
+	pusher := push.New(p, exporter, o...)
 	pusher.Start()
 
 	if h, _ := exporter.c.(http.Handler); h != nil {
@@ -65,7 +67,7 @@ type options struct {
 	Quantiles []float64
 	Hints     []string
 	BaseURL   *url.URL
-	Tags      []core.KeyValue
+	Tags      []kv.KeyValue
 	Debug     bool
 }
 
@@ -104,7 +106,7 @@ func WithBaseURL(baseURL *url.URL) Option {
 }
 
 // WithResource sets resource tags.
-func WithResource(tags ...core.KeyValue) Option {
+func WithResource(tags ...kv.KeyValue) Option {
 	return func(o *options) {
 		o.Tags = tags
 	}
@@ -186,10 +188,10 @@ type (
 )
 
 // Export exports the provide metric record to Mackerel.
-func (e *Exporter) Export(ctx context.Context, res *resource.Resource, a export.CheckpointSet) error {
+func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	var regs []*registration
 	a.ForEach(func(r export.Record) error {
-		reg, err := e.convertToRegistration(r, res)
+		reg, err := e.convertToRegistration(r, r.Resource())
 		if err != nil {
 			return err
 		}
@@ -338,12 +340,12 @@ func (e *Exporter) lookupHint(name string) string {
 	return ""
 }
 
-func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.NumberKind) []*mackerel.MetricValue {
+func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind metric.NumberKind) []*mackerel.MetricValue {
 	var a []*mackerel.MetricValue
 
 	// see https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/selector/simple/simple.go
 	if p, ok := aggr.(aggregator.Distribution); ok {
-		// export.MeasureKind: MinMaxSumCount, Distribution, Points
+		// metric.Value{Record|Obserb}erKind: MinMaxSumCount, Distribution, Points
 		if min, err := p.Min(); err == nil {
 			a = append(a, metricValue(metricname.Join(name, "min"), min.AsInterface(kind)))
 		}
@@ -359,12 +361,12 @@ func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind core.N
 			a = append(a, metricValue(metricname.Join(name, qname), q.AsInterface(kind)))
 		}
 	} else if p, ok := aggr.(aggregator.LastValue); ok {
-		// export.ObserverKind: LastValue
+		// Where this aggregator is used in?
 		if last, _, err := p.LastValue(); err == nil {
 			a = append(a, metricValue(name, last.AsInterface(kind)))
 		}
 	} else if p, ok := aggr.(aggregator.Sum); ok {
-		// export.CounterKind: Sum
+		// metric.CounterKind, etc: Sum
 		if sum, err := p.Sum(); err == nil {
 			a = append(a, metricValue(name, sum.AsInterface(kind)))
 		}
