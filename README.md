@@ -57,21 +57,21 @@ If you give *InstallNewPipeline* a valid API key with *WithAPIKey* option, the e
 ```go
 import (
 	"context"
+	"log"
+	"net/http"
 	"os"
+	"runtime"
 	"time"
 
 	"go.opentelemetry.io/otel/api/global"
-	"go.opentelemetry.io/otel/api/key"
+	"go.opentelemetry.io/otel/api/kv"
 	"go.opentelemetry.io/otel/api/metric"
+	"go.opentelemetry.io/otel/api/unit"
 
 	"github.com/lufia/mackerelexporter-go"
 )
 
 var (
-	// These keys are mapped to Mackerel's attributes.
-	keyHostID      = key.New("host.id")               // custom identifier
-	keyHostName    = key.New("host.name")             // hostname
-
 	hints = []string{
 		"storage.#",
 	}
@@ -79,28 +79,54 @@ var (
 
 func main() {
 	apiKey := os.Getenv("MACKEREL_APIKEY")
-	pusher, _ := mackerel.InstallNewPipeline(
+	pusher, handler, err := mackerel.InstallNewPipeline(
 		mackerel.WithAPIKey(apiKey),
 		mackerel.WithHints(hints),
+		mackerel.WithResource([]kv.KeyValue{
+			mackerel.KeyHostID.String("10-1-2-241"),
+			mackerel.KeyHostName.String("localhost"),
+			mackerel.KeyServiceNS.String("example"), // service name
+			mackerel.KeyServiceName.String("app"),   // role name
+		}),
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer pusher.Stop()
+	if handler != nil {
+		http.HandlerFunc("/metrics", handler)
+		go http.ListenAndServe(":8080", nil)
+	}
 
 	meter := global.MeterProvider().Meter("example")
-	firestoreRead := meter.NewInt64Counter("storage.firestore.read", metric.WithKeys(
-		keyHostID, keyHostName, keyGraphClass, keyMetricClass,
-	))
-	labels := meter.Labels(
-		keyHostID.String("10-1-2-241"),
-		keyHostName.String("localhost"),
+	meterMust := metric.Must(meter)
+	firestoreRead := meterMust.NewInt64Counter("storage.firestore.read")
+	var (
+		memAllocs      metric.Int64ValueObserver
+		memTotalAllocs metric.Int64ValueObserver
 	)
-	ctx := context.Background()
-	firestoreRead.Add(ctx, 100, labels)
+	memStats := meterMust.NewBatchObserver(func(ctx context.Context, result metric.BatchObserverResult) {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		result.Observe(nil,
+			memAllocs.Observation(int64(m.Alloc)),
+			memTotalAllocs.Observation(int64(m.TotalAlloc)),
+		)
+	})
+	memAllocs = memStats.NewInt64ValueObserver("runtime.memory.alloc", metric.WithUnit(unit.Bytes))
+	memTotalAllocs = memStats.NewInt64ValueObserver("runtime.memory.total_alloc", metric.WithUnit(unit.Bytes))
 
-	v := firestoreRead.Bind(labels)
+	ctx := context.Background()
+	additionalLabels := []kv.KeyValue{
+		mackerel.KeyServiceVersion("v1.0"),
+	}
+	firestoreRead.Add(ctx, 100, additionalLabels)
+
+	v := firestoreRead.Bind(additionalLabels)
 	v.Add(ctx, 20)
 
 	m := firestoreRead.Measurement(1)
-	meter.RecordBatch(ctx, labels, m)
+	meter.RecordBatch(ctx, additionalLabels, m)
 	time.Sleep(2 * time.Minute)
 }
 ```
