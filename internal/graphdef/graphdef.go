@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"go.opentelemetry.io/otel/api/core"
 	"go.opentelemetry.io/otel/api/metric"
 	"go.opentelemetry.io/otel/api/unit"
 
@@ -22,7 +21,7 @@ const (
 type Options struct {
 	Name      string
 	Unit      unit.Unit
-	Kind      core.NumberKind
+	Kind      metric.NumberKind
 	Quantiles []float64
 }
 
@@ -33,7 +32,7 @@ func New(name string, kind metric.Kind, opts Options) (*mackerel.GraphDefsParam,
 	if opts.Unit == "" {
 		opts.Unit = unitDimensionless
 	}
-	if kind == metric.MeasureKind {
+	if kind == metric.ValueRecorderKind {
 		name = metricname.Join(name, "max") // Anything is fine
 	}
 	if opts.Name == "" {
@@ -70,17 +69,17 @@ func metricDisplayName(name string) string {
 	return fmt.Sprintf("%%%d", n)
 }
 
-func graphUnit(u unit.Unit, kind core.NumberKind) string {
+func graphUnit(u unit.Unit, kind metric.NumberKind) string {
 	switch u {
 	case unit.Bytes:
 		return "bytes"
 	case unit.Dimensionless, unit.Milliseconds:
-		if kind == core.Float64NumberKind {
+		if kind == metric.Float64NumberKind {
 			return "float"
 		}
 		return "integer"
 	default:
-		if kind == core.Float64NumberKind {
+		if kind == metric.Float64NumberKind {
 			return "float"
 		}
 		return "float"

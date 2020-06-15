@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/mackerelio/mackerel-client-go"
-	"go.opentelemetry.io/otel/api/core"
 	"go.opentelemetry.io/otel/api/metric"
 )
 
@@ -40,7 +39,7 @@ func TestNew(t *testing.T) {
 			name: "custom.ether0.txBytes",
 			opts: Options{
 				Name: "custom.#",
-				Kind: core.Float64NumberKind,
+				Kind: metric.Float64NumberKind,
 			},
 			want: &mackerel.GraphDefsParam{
 				Name:        "custom.#",
@@ -56,7 +55,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			desc: "simple_measure",
-			kind: metric.MeasureKind,
+			kind: metric.ValueRecorderKind,
 			name: "custom.http.latency",
 			opts: Options{},
 			want: &mackerel.GraphDefsParam{
@@ -73,7 +72,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			desc: "multiple_wildcard",
-			kind: metric.MeasureKind,
+			kind: metric.ValueRecorderKind,
 			name: "custom.http.index.latency",
 			opts: Options{
 				Name: "custom.http.#.*",
