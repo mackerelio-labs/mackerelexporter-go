@@ -134,9 +134,12 @@ func (c *handlerClient) PostServiceMetricValues(name string, metrics []*mackerel
 	return nil
 }
 
+// {{.Name}} is starting with "custom.", this is designed for the push mode.
+// But container-agent or go-mackerel-plugin will add "custom." prefix.
+// Therefore we should drop "custom." prefix if the pull mode.
 var metricsTemplate = template.Must(template.New("metrics").Parse(`
 {{- range . -}}
-{{.Name}}	{{.Value}}	{{.Time}}
+{{slice .Name 7}}	{{.Value}}	{{.Time}}
 {{end -}}
 `))
 
