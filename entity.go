@@ -3,7 +3,7 @@ package mackerel
 import (
 	"errors"
 
-	"github.com/lufia/mackerelexporter-go/internal/tag"
+	"github.com/mackerelio-labs/mackerelexporter-go/internal/tag"
 	"github.com/mackerelio/mackerel-client-go"
 )
 

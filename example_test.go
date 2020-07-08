@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/lufia/mackerelexporter-go"
+	"github.com/mackerelio-labs/mackerelexporter-go"
 )
 
 func ExampleInstallNewPipeline_pushMode() {

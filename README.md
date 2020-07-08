@@ -11,7 +11,7 @@ If you use Go Modules, then you just import OpenTelemetry API and the exporter. 
 
 ```console
 $ go get -u go.opentelemetry.io/otel
-$ go get -u github.com/lufia/mackerelexporter-go
+$ go get -u github.com/mackerelio-labs/mackerelexporter-go
 ```
 
 After installation, you can start to write a program. There is the example at the Example section of this document.
@@ -68,7 +68,7 @@ import (
 	"go.opentelemetry.io/otel/api/metric"
 	"go.opentelemetry.io/otel/api/unit"
 
-	"github.com/lufia/mackerelexporter-go"
+	"github.com/mackerelio-labs/mackerelexporter-go"
 )
 
 var (
@@ -132,6 +132,6 @@ func main() {
 ```
 
 [godev-image]: https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white&style=flat-square
-[godev-url]: https://pkg.go.dev/github.com/lufia/mackerelexporter-go
-[actions-image]: https://github.com/lufia/mackerelexporter-go/workflows/ci/badge.svg
-[actions-url]: https://github.com/lufia/mackerelexporter-go/actions
+[godev-url]: https://pkg.go.dev/github.com/mackerelio-labs/mackerelexporter-go
+[actions-image]: https://github.com/mackerelio-labs/mackerelexporter-go/workflows/ci/badge.svg
+[actions-url]: https://github.com/mackerelio-labs/mackerelexporter-go/actions

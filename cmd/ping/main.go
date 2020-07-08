@@ -15,7 +15,7 @@ import (
 	"go.opentelemetry.io/otel/api/metric"
 	"go.opentelemetry.io/otel/api/unit"
 
-	"github.com/lufia/mackerelexporter-go"
+	"github.com/mackerelio-labs/mackerelexporter-go"
 )
 
 // https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/example_test.go

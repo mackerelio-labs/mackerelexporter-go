@@ -18,9 +18,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/resource"
 
-	"github.com/lufia/mackerelexporter-go/internal/graphdef"
-	"github.com/lufia/mackerelexporter-go/internal/metricname"
-	"github.com/lufia/mackerelexporter-go/internal/tag"
+	"github.com/mackerelio-labs/mackerelexporter-go/internal/graphdef"
+	"github.com/mackerelio-labs/mackerelexporter-go/internal/metricname"
+	"github.com/mackerelio-labs/mackerelexporter-go/internal/tag"
 	"github.com/mackerelio/mackerel-client-go"
 )
 
