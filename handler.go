@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"sync"
 	"text/template"
 
@@ -137,11 +138,32 @@ func (c *handlerClient) PostServiceMetricValues(name string, metrics []*mackerel
 // {{.Name}} is starting with "custom.", this is designed for the push mode.
 // But container-agent or go-mackerel-plugin will add "custom." prefix.
 // Therefore we should drop "custom." prefix if the pull mode.
-var metricsTemplate = template.Must(template.New("metrics").Parse(`
+var metricsTemplate = template.Must(template.New("metrics").Funcs(template.FuncMap{"formatValue": formatValue}).Parse(`
 {{- range . -}}
-{{slice .Name 7}}	{{.Value}}	{{.Time}}
+{{slice .Name 7}}	{{.Value | formatValue}}	{{.Time}}
 {{end -}}
 `))
+
+func formatValue(v reflect.Value) (reflect.Value, error) {
+	var s string
+	switch k := v.Kind(); k {
+	default:
+		return reflect.ValueOf(nil), fmt.Errorf("invalid type: %v", k)
+	case reflect.Bool:
+		if v.Bool() {
+			s = "1"
+		} else {
+			s = "0"
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		s = fmt.Sprintf("%d", v.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		s = fmt.Sprintf("%d", v.Uint())
+	case reflect.Float32, reflect.Float64:
+		s = fmt.Sprintf("%f", v.Float())
+	}
+	return reflect.ValueOf(s), nil
+}
 
 func (c *handlerClient) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.mu.RLock()
