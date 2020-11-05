@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/api/global"
-	"go.opentelemetry.io/otel/api/kv"
 	"go.opentelemetry.io/otel/api/metric"
+	"go.opentelemetry.io/otel/label"
 	export "go.opentelemetry.io/otel/sdk/export/metric"
-	"go.opentelemetry.io/otel/sdk/export/metric/aggregator"
+	"go.opentelemetry.io/otel/sdk/export/metric/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/controller/push"
-	integrator "go.opentelemetry.io/otel/sdk/metric/integrator/simple"
+	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/resource"
 
@@ -49,7 +49,7 @@ func NewExportPipeline(opts ...Option) (*push.Controller, http.HandlerFunc, erro
 		o = append(o, push.WithResource(res))
 	}
 
-	p := integrator.New(s, false)
+	p := processor.New(s, false)
 	pusher := push.New(p, exporter, o...)
 	pusher.Start()
 
@@ -67,7 +67,7 @@ type options struct {
 	Quantiles []float64
 	Hints     []string
 	BaseURL   *url.URL
-	Tags      []kv.KeyValue
+	Tags      []label.KeyValue
 	Debug     bool
 }
 
@@ -83,7 +83,7 @@ func WithAPIKey(apiKey string) Option {
 func WithQuantiles(quantiles []float64) Option {
 	for _, q := range quantiles {
 		if q < 0.0 || q > 1.0 {
-			panic(aggregator.ErrInvalidQuantile)
+			panic(aggregation.ErrInvalidQuantile)
 		}
 	}
 	return func(o *options) {
@@ -106,7 +106,7 @@ func WithBaseURL(baseURL *url.URL) Option {
 }
 
 // WithResource sets resource tags.
-func WithResource(tags ...kv.KeyValue) Option {
+func WithResource(tags ...label.KeyValue) Option {
 	return func(o *options) {
 		o.Tags = tags
 	}
@@ -347,7 +347,7 @@ func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind metric
 	var a []*mackerel.MetricValue
 
 	// see https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/selector/simple/simple.go
-	if p, ok := aggr.(aggregator.Distribution); ok {
+	if p, ok := aggr.(aggregation.Distribution); ok {
 		// metric.Value{Record|Obserb}erKind: MinMaxSumCount, Distribution, Points
 		if min, err := p.Min(); err == nil {
 			a = append(a, metricValue(metricname.Join(name, "min"), min.AsInterface(kind)))
@@ -363,12 +363,12 @@ func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind metric
 			qname := metricname.Percentile(quantile)
 			a = append(a, metricValue(metricname.Join(name, qname), q.AsInterface(kind)))
 		}
-	} else if p, ok := aggr.(aggregator.LastValue); ok {
+	} else if p, ok := aggr.(aggregation.LastValue); ok {
 		// Where this aggregator is used in?
 		if last, _, err := p.LastValue(); err == nil {
 			a = append(a, metricValue(name, last.AsInterface(kind)))
 		}
-	} else if p, ok := aggr.(aggregator.Sum); ok {
+	} else if p, ok := aggr.(aggregation.Sum); ok {
 		// metric.CounterKind, etc: Sum
 		if sum, err := p.Sum(); err == nil {
 			a = append(a, metricValue(name, sum.AsInterface(kind)))
