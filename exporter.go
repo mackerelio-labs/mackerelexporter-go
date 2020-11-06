@@ -30,7 +30,7 @@ func InstallNewPipeline(opts ...Option) (*push.Controller, http.HandlerFunc, err
 	if err != nil {
 		return nil, nil, err
 	}
-	global.SetMeterProvider(pusher.Provider())
+	global.SetMeterProvider(pusher.MeterProvider())
 	return pusher, handler, err
 }
 
@@ -49,7 +49,7 @@ func NewExportPipeline(opts ...Option) (*push.Controller, http.HandlerFunc, erro
 		o = append(o, push.WithResource(res))
 	}
 
-	p := processor.New(s, false)
+	p := processor.New(s, exporter)
 	pusher := push.New(p, exporter, o...)
 	pusher.Start()
 
@@ -179,6 +179,12 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 	}, nil
 }
 
+// ExportKindFor implements ExportKindSelector.
+func (e *Exporter) ExportKindFor(*metric.Descriptor, aggregation.Kind) export.ExportKind {
+	// TODO: Should we determine ExportKind using arguments?
+	return export.DeltaExporter
+}
+
 type (
 	registration struct {
 		res      *tag.Resource
@@ -193,7 +199,7 @@ type (
 // Export exports the provide metric record to Mackerel.
 func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
 	var regs []*registration
-	a.ForEach(func(r export.Record) error {
+	a.ForEach(e, func(r export.Record) error {
 		reg, err := e.convertToRegistration(r, r.Resource())
 		if err != nil {
 			return err
@@ -313,7 +319,7 @@ func (e *Exporter) convertToRegistration(r export.Record, res *resource.Resource
 	// TODO(lufia): Enforce the metric to be the custom metric if hint is exist
 	name := metricname.Canonical(desc.Name())
 	hint := e.lookupHint(desc.Name())
-	aggr := r.Aggregator()
+	aggr := r.Aggregation()
 	reg.metrics = e.metricValues(name, aggr, kind)
 
 	if !strings.HasPrefix(name, "custom.") {
@@ -343,7 +349,7 @@ func (e *Exporter) lookupHint(name string) string {
 	return ""
 }
 
-func (e *Exporter) metricValues(name string, aggr export.Aggregator, kind metric.NumberKind) []*mackerel.MetricValue {
+func (e *Exporter) metricValues(name string, aggr aggregation.Aggregation, kind metric.NumberKind) []*mackerel.MetricValue {
 	var a []*mackerel.MetricValue
 
 	// see https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/selector/simple/simple.go
