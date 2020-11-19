@@ -6,8 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"go.opentelemetry.io/otel/api/kv"
-	"go.opentelemetry.io/otel/api/kv/value"
+	"go.opentelemetry.io/otel/label"
 )
 
 const (
@@ -103,7 +102,7 @@ func (r *Resource) RoleFullname() string {
 }
 
 // UnmarshalTags parses labels and store the result into v.
-func UnmarshalTags(tags []kv.KeyValue, v interface{}) error {
+func UnmarshalTags(tags []label.KeyValue, v interface{}) error {
 	p := reflect.ValueOf(v)
 	for _, tag := range tags {
 		if !tag.Key.Defined() {
@@ -119,7 +118,7 @@ func UnmarshalTags(tags []kv.KeyValue, v interface{}) error {
 }
 
 // name must mean v
-func unmarshalTags(name string, keys []string, value value.Value, v reflect.Value) error {
+func unmarshalTags(name string, keys []string, value label.Value, v reflect.Value) error {
 	switch kind := v.Type().Kind(); kind {
 	case reflect.Ptr:
 		return unmarshalTags(name, keys, value, reflect.Indirect(v))

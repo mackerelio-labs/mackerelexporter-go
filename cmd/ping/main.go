@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/api/global"
-	"go.opentelemetry.io/otel/api/kv"
 	"go.opentelemetry.io/otel/api/metric"
-	"go.opentelemetry.io/otel/api/unit"
+	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/unit"
 
-	"github.com/mackerelio-labs/mackerelexporter-go"
+	mackerel "github.com/mackerelio-labs/mackerelexporter-go"
 )
 
 // https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/example_test.go
@@ -48,14 +48,14 @@ var (
 
 	latency = meterMust.NewFloat64ValueRecorder("http.handlers.index.latency")
 
-	hostLabels = []kv.KeyValue{
+	hostLabels = []label.KeyValue{
 		mackerel.KeyHostID.String("10-1-2-241"),
 		mackerel.KeyHostName.String("localhost"),
 	}
 
 	requestCount = meterMust.NewInt64Counter("http.requests.count")
 
-	serviceLabels = []kv.KeyValue{
+	serviceLabels = []label.KeyValue{
 		mackerel.KeyServiceNS.String("example"),
 		mackerel.KeyServiceName.String("ping"),
 	}

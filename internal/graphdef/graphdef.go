@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/api/metric"
-	"go.opentelemetry.io/otel/api/unit"
+	"go.opentelemetry.io/otel/unit"
 
 	"github.com/mackerelio-labs/mackerelexporter-go/internal/metricname"
 	"github.com/mackerelio/mackerel-client-go"
