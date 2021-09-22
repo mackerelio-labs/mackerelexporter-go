@@ -5,20 +5,21 @@ import (
 	"testing"
 
 	"github.com/mackerelio/mackerel-client-go"
-	"go.opentelemetry.io/otel/api/metric"
+	"go.opentelemetry.io/otel/metric/number"
+	"go.opentelemetry.io/otel/metric/sdkapi"
 )
 
 func TestNew(t *testing.T) {
 	tests := []struct {
 		desc string
-		kind metric.Kind
+		kind sdkapi.InstrumentKind
 		name string
 		opts Options
 		want *mackerel.GraphDefsParam
 	}{
 		{
 			desc: "simple_counter",
-			kind: metric.CounterKind,
+			kind: sdkapi.CounterInstrumentKind,
 			name: "custom.ether0.txBytes",
 			opts: Options{},
 			want: &mackerel.GraphDefsParam{
@@ -35,11 +36,11 @@ func TestNew(t *testing.T) {
 		},
 		{
 			desc: "counter_with_options",
-			kind: metric.CounterKind,
+			kind: sdkapi.CounterInstrumentKind,
 			name: "custom.ether0.txBytes",
 			opts: Options{
 				Name: "custom.#",
-				Kind: metric.Float64NumberKind,
+				Kind: number.Float64Kind,
 			},
 			want: &mackerel.GraphDefsParam{
 				Name:        "custom.#",
@@ -55,7 +56,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			desc: "simple_measure",
-			kind: metric.ValueRecorderKind,
+			kind: sdkapi.HistogramInstrumentKind,
 			name: "custom.http.latency",
 			opts: Options{},
 			want: &mackerel.GraphDefsParam{
@@ -72,7 +73,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			desc: "multiple_wildcard",
-			kind: metric.ValueRecorderKind,
+			kind: sdkapi.HistogramInstrumentKind,
 			name: "custom.http.index.latency",
 			opts: Options{
 				Name: "custom.http.#.*",

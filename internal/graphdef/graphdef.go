@@ -4,8 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"go.opentelemetry.io/otel/api/metric"
-	"go.opentelemetry.io/otel/unit"
+	"go.opentelemetry.io/otel/metric/number"
+	"go.opentelemetry.io/otel/metric/sdkapi"
+	"go.opentelemetry.io/otel/metric/unit"
 
 	"github.com/mackerelio-labs/mackerelexporter-go/internal/metricname"
 	"github.com/mackerelio/mackerel-client-go"
@@ -21,18 +22,18 @@ const (
 type Options struct {
 	Name      string
 	Unit      unit.Unit
-	Kind      metric.NumberKind
+	Kind      number.Kind
 	Quantiles []float64
 }
 
 var errMismatch = errors.New("mismatched metric names")
 
 // New returns Mackerel's Graph Definition. Each names in arguments must be canonicalized.
-func New(name string, kind metric.Kind, opts Options) (*mackerel.GraphDefsParam, error) {
+func New(name string, kind sdkapi.InstrumentKind, opts Options) (*mackerel.GraphDefsParam, error) {
 	if opts.Unit == "" {
 		opts.Unit = unitDimensionless
 	}
-	if kind == metric.ValueRecorderKind {
+	if kind == sdkapi.HistogramInstrumentKind {
 		name = metricname.Join(name, "max") // Anything is fine
 	}
 	if opts.Name == "" {
@@ -69,17 +70,17 @@ func metricDisplayName(name string) string {
 	return fmt.Sprintf("%%%d", n)
 }
 
-func graphUnit(u unit.Unit, kind metric.NumberKind) string {
+func graphUnit(u unit.Unit, kind number.Kind) string {
 	switch u {
 	case unit.Bytes:
 		return "bytes"
 	case unit.Dimensionless, unit.Milliseconds:
-		if kind == metric.Float64NumberKind {
+		if kind == number.Float64Kind {
 			return "float"
 		}
 		return "integer"
 	default:
-		if kind == metric.Float64NumberKind {
+		if kind == number.Float64Kind {
 			return "float"
 		}
 		return "float"
