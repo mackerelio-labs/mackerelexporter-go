@@ -6,14 +6,14 @@ import (
 	"reflect"
 	"strings"
 
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
 	resourceNameSep = "."
 )
 
-// Resource represents a resource constructed with labels.
+// Resource represents a resource constructed with attributes.
 type Resource struct {
 	Service Service `resource:"service"`
 	Host    Host    `resource:"host"`
@@ -101,8 +101,8 @@ func (r *Resource) RoleFullname() string {
 	return r.Service.NS + ":" + r.Service.Name
 }
 
-// UnmarshalTags parses labels and store the result into v.
-func UnmarshalTags(tags []label.KeyValue, v interface{}) error {
+// UnmarshalTags parses attributes and store the result into v.
+func UnmarshalTags(tags []attribute.KeyValue, v interface{}) error {
 	p := reflect.ValueOf(v)
 	for _, tag := range tags {
 		if !tag.Key.Defined() {
@@ -118,7 +118,7 @@ func UnmarshalTags(tags []label.KeyValue, v interface{}) error {
 }
 
 // name must mean v
-func unmarshalTags(name string, keys []string, value label.Value, v reflect.Value) error {
+func unmarshalTags(name string, keys []string, value attribute.Value, v reflect.Value) error {
 	switch kind := v.Type().Kind(); kind {
 	case reflect.Ptr:
 		return unmarshalTags(name, keys, value, reflect.Indirect(v))
@@ -176,7 +176,8 @@ func unmarshalTags(name string, keys []string, value label.Value, v reflect.Valu
 			return fmt.Errorf("%s is %v", keys[0], kind)
 		}
 		if v.CanSet() {
-			v.SetUint(value.AsUint64())
+			n := value.AsInt64()
+			v.SetUint(uint64(n))
 		}
 		return nil
 	case reflect.Float32, reflect.Float64:

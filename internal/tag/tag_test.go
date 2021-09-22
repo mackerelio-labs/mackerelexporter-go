@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func TestUnmarshalTags(t *testing.T) {
@@ -16,14 +16,14 @@ func TestUnmarshalTags(t *testing.T) {
 			Version:  "a:1.1",
 		},
 	}
-	labels := []label.KeyValue{
-		label.Key("service.name").String(want.Service.Name),
-		label.Key("service.namespace").String(want.Service.NS),
-		label.Key("service.instance.id").String(want.Service.Instance.ID),
-		label.Key("service.version").String(want.Service.Version),
+	attrs := []attribute.KeyValue{
+		attribute.Key("service.name").String(want.Service.Name),
+		attribute.Key("service.namespace").String(want.Service.NS),
+		attribute.Key("service.instance.id").String(want.Service.Instance.ID),
+		attribute.Key("service.version").String(want.Service.Version),
 	}
 	var m Resource
-	if err := UnmarshalTags(labels, &m); err != nil {
+	if err := UnmarshalTags(attrs, &m); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(m, want) {
@@ -40,14 +40,14 @@ func TestUnmarshalTagsInterface(t *testing.T) {
 			Version:  "a:1.1",
 		},
 	}
-	labels := []label.KeyValue{
-		label.Key("service.name").String(want.Service.Name),
-		label.Key("service.namespace").String(want.Service.NS),
-		label.Key("service.instance.id").String(want.Service.Instance.ID),
-		label.Key("service.version").String(want.Service.Version),
+	attrs := []attribute.KeyValue{
+		attribute.Key("service.name").String(want.Service.Name),
+		attribute.Key("service.namespace").String(want.Service.NS),
+		attribute.Key("service.instance.id").String(want.Service.Instance.ID),
+		attribute.Key("service.version").String(want.Service.Version),
 	}
 	var v interface{}
-	if err := UnmarshalTags(labels, &v); err != nil {
+	if err := UnmarshalTags(attrs, &v); err != nil {
 		t.Fatal(err)
 	}
 	if s, ok := lookupInterfaceMap(v, "service", "name").(string); !ok || s != want.Service.Name {
