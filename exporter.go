@@ -2,18 +2,20 @@ package mackerel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/otel/api/global"
-	"go.opentelemetry.io/otel/api/metric"
-	"go.opentelemetry.io/otel/label"
-	export "go.opentelemetry.io/otel/sdk/export/metric"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/global"
+	"go.opentelemetry.io/otel/metric/number"
+	exportmetric "go.opentelemetry.io/otel/sdk/export/metric"
 	"go.opentelemetry.io/otel/sdk/export/metric/aggregation"
-	"go.opentelemetry.io/otel/sdk/metric/controller/push"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
 	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -25,8 +27,8 @@ import (
 )
 
 // InstallNewPipeline instantiates a NewExportPipeline and registers it globally.
-func InstallNewPipeline(opts ...Option) (*push.Controller, http.HandlerFunc, error) {
-	pusher, handler, err := NewExportPipeline(opts...)
+func InstallNewPipeline(ctx context.Context, opts ...Option) (*controller.Controller, http.HandlerFunc, error) {
+	pusher, handler, err := NewExportPipeline(ctx, opts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -35,23 +37,30 @@ func InstallNewPipeline(opts ...Option) (*push.Controller, http.HandlerFunc, err
 }
 
 // NewExportPipeline sets up a complete export pipeline.
-func NewExportPipeline(opts ...Option) (*push.Controller, http.HandlerFunc, error) {
-	// There are few types in simple; inexpensive, sketch, exact.
-	s := simple.NewWithExactDistribution()
+func NewExportPipeline(ctx context.Context, opts ...Option) (*controller.Controller, http.HandlerFunc, error) {
 	exporter, err := NewExporter(opts...)
 	if err != nil {
 		return nil, nil, err
 	}
-	var o []push.Option
-	o = append(o, push.WithPeriod(time.Minute))
+	var o []controller.Option
+	o = append(o, controller.WithExporter(exporter))
+	o = append(o, controller.WithCollectPeriod(time.Minute))
 	if len(exporter.opts.Tags) > 0 {
-		res := resource.New(exporter.opts.Tags...)
-		o = append(o, push.WithResource(res))
+		// TODO: resource.Default, resource.Environment and resource.Merge
+		res, err := resource.New(ctx, resource.WithAttributes(exporter.opts.Tags...))
+		if err != nil {
+			return nil, nil, err
+		}
+		o = append(o, controller.WithResource(res))
 	}
 
+	// There are few types in simple; inexpensive, histgram, exact.
+	s := simple.NewWithExactDistribution()
 	p := processor.New(s, exporter)
-	pusher := push.New(p, exporter, o...)
-	pusher.Start()
+	pusher := controller.New(p, o...)
+	if err := pusher.Start(ctx); err != nil {
+		return nil, nil, err
+	}
 
 	if h, _ := exporter.c.(http.Handler); h != nil {
 		return pusher, h.ServeHTTP, nil
@@ -67,7 +76,7 @@ type options struct {
 	Quantiles []float64
 	Hints     []string
 	BaseURL   *url.URL
-	Tags      []label.KeyValue
+	Tags      []attribute.KeyValue
 	Debug     bool
 }
 
@@ -78,12 +87,14 @@ func WithAPIKey(apiKey string) Option {
 	}
 }
 
+var errInvalidQuantile = errors.New("the requested quantile is out of range")
+
 // WithQuantiles sets quantiles for recording measure metrics.
 // Each quantiles must be unique and its precision must be greater or equal than 0.01.
 func WithQuantiles(quantiles []float64) Option {
 	for _, q := range quantiles {
 		if q < 0.0 || q > 1.0 {
-			panic(aggregation.ErrInvalidQuantile)
+			panic(errInvalidQuantile)
 		}
 	}
 	return func(o *options) {
@@ -106,7 +117,7 @@ func WithBaseURL(baseURL *url.URL) Option {
 }
 
 // WithResource sets resource tags.
-func WithResource(tags ...label.KeyValue) Option {
+func WithResource(tags ...attribute.KeyValue) Option {
 	return func(o *options) {
 		o.Tags = tags
 	}
@@ -145,7 +156,7 @@ type Exporter struct {
 	graphMetricDefs map[string]struct{}
 }
 
-var _ export.Exporter = &Exporter{}
+var _ exportmetric.Exporter = &Exporter{}
 
 // NewExporter creates a new Exporter.
 func NewExporter(opts ...Option) (*Exporter, error) {
@@ -180,9 +191,8 @@ func NewExporter(opts ...Option) (*Exporter, error) {
 }
 
 // ExportKindFor implements ExportKindSelector.
-func (e *Exporter) ExportKindFor(*metric.Descriptor, aggregation.Kind) export.ExportKind {
-	// TODO: Should we determine ExportKind using arguments?
-	return export.DeltaExporter
+func (e *Exporter) ExportKindFor(desc *metric.Descriptor, kind aggregation.Kind) exportmetric.ExportKind {
+	return exportmetric.DeltaExportKindSelector().ExportKindFor(desc, kind)
 }
 
 type (
@@ -197,10 +207,10 @@ type (
 )
 
 // Export exports the provide metric record to Mackerel.
-func (e *Exporter) Export(ctx context.Context, a export.CheckpointSet) error {
+func (e *Exporter) Export(ctx context.Context, res *resource.Resource, a exportmetric.CheckpointSet) error {
 	var regs []*registration
-	a.ForEach(e, func(r export.Record) error {
-		reg, err := e.convertToRegistration(r, r.Resource())
+	a.ForEach(e, func(r exportmetric.Record) error {
+		reg, err := e.convertToRegistration(r, res)
 		if err != nil {
 			return err
 		}
@@ -304,14 +314,14 @@ func (e *Exporter) mergeGraphDefs(defs map[string]*mackerel.GraphDefsParam) {
 	}
 }
 
-func (e *Exporter) convertToRegistration(r export.Record, res *resource.Resource) (*registration, error) {
+func (e *Exporter) convertToRegistration(r exportmetric.Record, res *resource.Resource) (*registration, error) {
 	var reg registration
 	desc := r.Descriptor()
 	kind := desc.NumberKind()
 
 	var t tag.Resource
-	labels := append(r.Labels().ToSlice(), res.Attributes()...)
-	if err := tag.UnmarshalTags(labels, &t); err != nil {
+	attrs := append(r.Labels().ToSlice(), res.Attributes()...)
+	if err := tag.UnmarshalTags(attrs, &t); err != nil {
 		return nil, err
 	}
 	reg.res = &t
@@ -331,7 +341,7 @@ func (e *Exporter) convertToRegistration(r export.Record, res *resource.Resource
 		Kind:      kind,
 		Quantiles: e.opts.Quantiles,
 	}
-	g, err := graphdef.New(name, desc.MetricKind(), opts)
+	g, err := graphdef.New(name, desc.InstrumentKind(), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -349,11 +359,17 @@ func (e *Exporter) lookupHint(name string) string {
 	return ""
 }
 
-func (e *Exporter) metricValues(name string, aggr aggregation.Aggregation, kind metric.NumberKind) []*mackerel.MetricValue {
+func (e *Exporter) metricValues(name string, aggr aggregation.Aggregation, kind number.Kind) []*mackerel.MetricValue {
 	var a []*mackerel.MetricValue
 
 	// see https://github.com/open-telemetry/opentelemetry-go/blob/master/sdk/metric/selector/simple/simple.go
-	if p, ok := aggr.(aggregation.Distribution); ok {
+	// https://pkg.go.dev/go.opentelemetry.io/otel/sdk/export/metric@v0.23.0/aggregation
+
+	if p, ok := aggr.(aggregation.Sum); ok {
+	}
+	if p, ok := aggr.(aggregation.MinMaxSumCount); ok {
+	}
+	if p, ok := aggr.(aggregation.Points); ok {
 		// metric.Value{Record|Obserb}erKind: MinMaxSumCount, Distribution, Points
 		if min, err := p.Min(); err == nil {
 			a = append(a, metricValue(metricname.Join(name, "min"), min.AsInterface(kind)))

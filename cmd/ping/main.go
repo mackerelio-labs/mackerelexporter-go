@@ -10,9 +10,9 @@ import (
 	"runtime"
 	"time"
 
-	"go.opentelemetry.io/otel/api/global"
-	"go.opentelemetry.io/otel/api/metric"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/unit"
 
 	mackerel "github.com/mackerelio-labs/mackerelexporter-go"
@@ -27,7 +27,7 @@ var (
 
 	quantiles = []float64{0.99, 0.90, 0.85}
 
-	meter     = global.MeterProvider().Meter("example/ping")
+	meter     = otel.MeterProvider().Meter("example/ping")
 	meterMust = metric.Must(meter)
 
 	goroutines = meterMust.NewInt64ValueObserver("runtime.goroutines", func(ctx context.Context, result metric.Int64ObserverResult) {
