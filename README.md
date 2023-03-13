@@ -1,5 +1,7 @@
 # mackerelexporter-go
 
+**This repository is deprecated. We now in develop new version to support OpenTelemetry.**
+
 This is OpenTelemetry Meter Exporter for [Mackerel](https://mackerel.io/).
 
 [![GoDev][godev-image]][godev-url]
